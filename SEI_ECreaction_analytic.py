@@ -80,12 +80,9 @@ t_ch = range(3600)
 t_dch = range(7200)
 Uocp_p = param["Positive electrode OCP [V]"]
 Uocp_n = param["Negative electrode OCP [V]"]
-# Uocp_n = param.evaluate(Uocp_n_fun)
-# SOL_n = np.arange(0.03,(0.9-0.03)/3600,0.9)
 SOL_n_cycle = np.append(np.linspace(0.03, 0.9, 3601),np.linspace(0.9, 0.03, 7201))
 
 
-# SOL_n = [SOL_n_cycle] * n_cycles
 SOL_n = np.tile(SOL_n_cycle, n_cycles*2)
 eta = Uocp_n(SOL_n) - U_sei
 
