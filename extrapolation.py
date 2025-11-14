@@ -1,6 +1,7 @@
 import pybamm
 from matplotlib import pyplot as plt
 import os
+from copy import deepcopy
 import time
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
@@ -66,7 +67,7 @@ def extrapolate_solution(solution, n_cycles):
     for k_0, v_0 in vars_0.items():
         v_end = vars_end[k_0]
         # y = mx+y0 = y0 + (y_end - y_0) / 1 * n_cycles
-        extrapolated_vars[k_0] = v_0 + (v_end - v_0) / 1 * (n_cycles - 1)
+        extrapolated_vars[k_0] = v_end + (v_end - v_0) / 1 * (n_cycles - 1)
 
     # print(vars_end, extrapolated_vars)
 
@@ -74,24 +75,48 @@ def extrapolate_solution(solution, n_cycles):
 
 def load_extrapolated_into_solution(sol, extrapolated_vars):
 
-    dQn = (sol["Negative electrode capacity [A.h]"].entries[-1] * extrapolated_vars["eps_n"] /
+    print("A")
+
+    dQn = (sol["Negative electrode capacity [A.h]"].data[-1] * extrapolated_vars["eps_n"] /
            sol["X-averaged negative electrode active material volume fraction"].entries[-1])
 
-    sol["X-averaged negative particle concentration [mol.m-3]"].data[-1] -= extrapolated_vars["LLI_sei"] / dQn
+    sol.last_state["X-averaged negative particle concentration [mol.m-3]"]._entries_raw =- extrapolated_vars["LLI_sei"] / dQn
     # sol["Negative SEI thickness [m]"].entries[-1] = extrapolated_vars["L_sei"]
-    sol["X-averaged negative SEI thickness [m]"].entries[-1] = extrapolated_vars["L_sei"]
+    sol.last_state["X-averaged negative SEI thickness [m]"]._entries_raw = [extrapolated_vars["L_sei"]]
     # theta_n_berria = theta_n - n_LLI_SEI / Q_n ?
 
     # Load the extrapolated eps
-    sol["X-averaged negative electrode active material volume fraction"].entries[-1] = extrapolated_vars["eps_n"]
-    sol["X-averaged positive electrode active material volume fraction"].entries[-1] = extrapolated_vars["eps_p"]
+    sol.last_state["X-averaged negative electrode active material volume fraction"]._entries_raw =  [extrapolated_vars["eps_n"]]
+    sol.last_state["X-averaged positive electrode active material volume fraction"]._entries_raw =  [extrapolated_vars["eps_p"]]
 
     return sol
+
+import numpy as np
+def update_input_params(sol, param_input, extrapolated_vars):
+
+    dQn = (sol["Negative electrode capacity [A.h]"].entries[-1] * extrapolated_vars["eps_n"] /
+           sol["X-averaged negative electrode active material volume fraction"].entries[-1])
+
+    #param_input = {}
+    param_input["Initial concentration in negative electrode [mol.m-3]"] -= extrapolated_vars["LLI_sei"] / dQn * parameter_values["Maximum concentration in negative electrode [mol.m-3]"]
+
+    #param_input["Initial concentration in negative electrode [mol.m-3]"] = (
+    #        sol["X-averaged negative particle concentration [mol.m-3]"].entries[0, -1] -
+    #        extrapolated_vars["LLI_sei"] / dQn)
+    # sol["Negative SEI thickness [m]"].entries[-1] = extrapolated_vars["L_sei"]
+    param_input["Initial SEI thickness [m]"] = extrapolated_vars["L_sei"]
+    # theta_n_berria = theta_n - n_LLI_SEI / Q_n ?
+
+    # Load the extrapolated eps
+    param_input["Negative electrode active material volume fraction"] =  extrapolated_vars["eps_n"]
+    param_input["Positive electrode active material volume fraction"] =  extrapolated_vars["eps_p"]
+
+    return param_input
 
 # sol_baseline.cycles[-1].steps[-1].y_slices
 if __name__ == "__main__":
 
-    tot_cycles = 100 # Total cycles to simulate
+    tot_cycles = 1000 # Total cycles to simulate
     n_cycles = 25 # each how many cycles to extrapolate
 
     experiment_baseline = pybamm.Experiment(
@@ -102,7 +127,7 @@ if __name__ == "__main__":
                 "Hold at 4.2V until C/50",)
         ] * tot_cycles
     )
-
+    #parameter_values = pybamm.ParameterValues("Chen2020")
     parameter_values = pybamm.ParameterValues("Mohtat2020")
     parameter_values.update({"SEI kinetic rate constant [m.s-1]": 1e-15})
     parameter_values.update({"Negative electrode LAM constant proportional term [s-1]": 1.7e-7}, check_already_exists=False)  # Sulzer 2021 std
@@ -138,6 +163,7 @@ if __name__ == "__main__":
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(parameter_values)
 
     spm = pybamm.lithium_ion.SPM({"SEI": "ec reaction limited", "loss of active material": "stress-driven","x-average side reactions":"true"})
+    # spm = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"})
     sim_baseline = pybamm.Simulation(spm, experiment=experiment_baseline, parameter_values=parameter_values)
     start_time = time.time()
     sol_baseline = sim_baseline.solve()
@@ -161,6 +187,22 @@ if __name__ == "__main__":
     extrapolation_results = {"cycle": [], "Q": [], "eps_n": [], "eps_p": [], "L_sei": [], "LLI_sei": [], "nLi":[]}
     starting_sol = None
 
+    param_input = {"Initial SEI thickness [m]": parameter_values["Initial SEI thickness [m]"],
+                   "Negative electrode active material volume fraction": parameter_values[
+                       "Negative electrode active material volume fraction"],
+                   "Positive electrode active material volume fraction": parameter_values[
+                       "Positive electrode active material volume fraction"],
+                   "Initial concentration in negative electrode [mol.m-3]": parameter_values[
+                       "Initial concentration in negative electrode [mol.m-3]"]}
+    cs_ini = param_input["Initial concentration in negative electrode [mol.m-3]"]
+
+
+    parameter_values.update({"Initial SEI thickness [m]": "[input]",
+                             "Negative electrode active material volume fraction": "[input]",
+                             "Positive electrode active material volume fraction": "[input]",
+                             "Initial concentration in negative electrode [mol.m-3]": "[input]"})
+
+
     sim = pybamm.Simulation(spm, experiment=experiment, parameter_values=parameter_values)
 
     extrap_time = 0.
@@ -168,9 +210,9 @@ if __name__ == "__main__":
         # Simulate the experiment from start or (modified) previous solution
         start_extrap_time = time.time()
         if starting_sol is not None:
-            sol = sim.solve(starting_solution=starting_sol)
+            sol = sim.solve(inputs=param_input, starting_solution=None)#starting_solution=starting_sol)
         else:
-            sol = sim.solve()
+            sol = sim.solve(inputs=param_input)
         extrap_time += time.time() - start_extrap_time
         # Last cycle containing the steps of the defined experiment sequence
         sol_last = sol.cycles[-1]
@@ -185,10 +227,11 @@ if __name__ == "__main__":
         extrapolated_vars = extrapolate_solution(sol_last, n_cycles)
 
         # Hemen parameter load-a egin behar dugu
-        sol_last = load_extrapolated_into_solution(sol_last, extrapolated_vars)
-        sim.model.set_initial_conditions_from(sol_last)
+        #sol_last = load_extrapolated_into_solution(sol_last, extrapolated_vars)
+        param_input = update_input_params(sol_last, param_input, extrapolated_vars)
+        #sim.solution = None
 
-        starting_sol = sol_last
+        #starting_sol = sol_last
 
     print("Extrapolation time: ", extrap_time)
 
