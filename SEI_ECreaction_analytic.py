@@ -71,6 +71,30 @@ eta = phi_s - phi_e - U_sei
 eta = sol["X-averaged negative electrode open-circuit potential [V]"](t) - U_sei
 
 
+"""
+We need a method to obtain eta without computing the PBM. We should estimate the
+SOC points. In this case, if we consider full charge-discharges for 1 h charge
+and 2h discharge...
+"""
+t_ch = range(3600)
+t_dch = range(7200)
+Uocp_p = param["Positive electrode OCP [V]"]
+Uocp_n = param["Negative electrode OCP [V]"]
+# Uocp_n = param.evaluate(Uocp_n_fun)
+# SOL_n = np.arange(0.03,(0.9-0.03)/3600,0.9)
+SOL_n_cycle = np.append(np.linspace(0.03, 0.9, 3601),np.linspace(0.9, 0.03, 7201))
+
+
+# SOL_n = [SOL_n_cycle] * n_cycles
+SOL_n = np.tile(SOL_n_cycle, n_cycles*2)
+eta = Uocp_n(SOL_n) - U_sei
+
+plt.figure(figsize=(9, 8))
+plt.plot(eta)
+
+
+
+
 # eta = delta_phi - U_sei - sol["X-averaged SEI film overpotential [V]"](t)
 exp_vals = np.exp(-alpha * F * eta / (R * T))
 # I = np.zeros_like(t)
@@ -138,7 +162,7 @@ def piecewise_integration(t, k_exp_t, D, A, L0, slope_tol=1e-3, min_len=5):
     return L, flat, segments
 
 start_time_piecewise = time.time()
-L_anal, flat, segments = piecewise_integration(t, k_exp, D_ec, A, L0)
+L_anal, flat, segments = piecewise_integration(t, k_exp[0:len(t)], D_ec, A, L0)
 # L_anal_mean = np.mean(L_anal, axis=0)
 end_time_piecewise = time.time()
 
@@ -149,7 +173,7 @@ end_time_piecewise = time.time()
 plt.figure(figsize=(9, 8))
 
 ax1 = plt.subplot(311)
-ax1.plot(t / 3600, eta)
+ax1.plot(t / 3600, eta[0:len(t)])
 # ax1.plot(t / 3600, delta_phi_num)
 ax1.set_ylabel("Neg. electrode SEI overpotential (V)")
 ax1.grid(True)
@@ -172,7 +196,7 @@ ax3 = plt.subplot(313, sharex=ax1)
 rel_err = np.abs(L_num - L_anal) / np.maximum(L_anal, 1e-20)
 # for i in range(L_num.shape[0]):
 #    plt.plot(t/3600, L_anal[i,:],)
-ax3.plot(t / 3600, rel_err)
+ax3.plot(t[0:len(eta)] / 3600, rel_err)
 ax3.set_xlabel("Time (h)")
 ax3.set_ylabel("Relative error")
 ax3.set_yscale("log")
