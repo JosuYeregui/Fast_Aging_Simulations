@@ -109,10 +109,8 @@ def y_vec_to_dict(v):
 
 def eval_delta_y(y_vec, sim, param_input, parameter_values):
 
-    # Convert vector → dict
     y_dict = y_vec_to_dict(y_vec)
 
-    # Construct extrapolated_vars in your existing format
     extrapolated_vars = {
         "LLI_sei": y_dict["LLI_sei"],
         "L_sei": y_dict["L_sei"],
@@ -120,36 +118,22 @@ def eval_delta_y(y_vec, sim, param_input, parameter_values):
         "eps_p": y_dict["eps_p"],
     }
 
-    # Copy template solution and params
     param_input_sol = deepcopy(param_input)
 
-    # Try direct injection into last_state
     param_input_sol = update_input_params(param_input_sol, extrapolated_vars, parameter_values)
-    try:
-        sol_fast = sim.solve(inputs=param_input_sol)
-    except:
-        sol_fast = sim.solve(inputs=param_input_sol)
+    sol_fast = sim.solve(inputs=param_input_sol)
 
-    # Extract y0 and y_end
     y0_dict, yend_dict = extract_y0_yend(sol_fast.cycles[-1])
-
-    # Convert end-state to vector
     y_end_vec = y_dict_to_vec(yend_dict)
 
-    y_end_vec[:1] += y_vec[:1]
+    y_end_vec[0] += y_vec[0] # LLI is given as delta from sol
 
-    # Δy = y_end − y
     return y_end_vec - y_vec, sol_fast, param_input_sol
 
 def scipy_rk23_integrate(y0_vec, sol_0, sim,
                          param_input, parameter_values,
                          t_final, rtol=1e-2, atol=1e-2,
                          stop_condition_fn=None):
-    """
-    Integrates dy/dt = Δy(y) from t=0 to t=t_final using SciPy's RK23.
-    One RHS evaluation = one cycle simulation.
-    Returns list of (t, y_vec, full_cycle_solution)
-    """
 
     # Wrapper converting SciPy call signature f(t,y) → dy/dt
     def rhs(t, y):
@@ -176,7 +160,6 @@ def scipy_rk23_integrate(y0_vec, sol_0, sim,
 
         history.append((t, y, sol))
 
-        # Optional early stopping
         if stop_condition_fn is not None:
             if stop_condition_fn(t, y, sol):
                 break
@@ -295,7 +278,7 @@ if __name__ == "__main__":
     )
     extrap_time = time.time() - start_extrap_time
 
-    print("Extrapolation time: ", extrap_time)
+    print("ODE time: ", extrap_time)
 
     all_Qs = [get_capacity_from_sol(s, prev_params, 0, esoh_solver) for (_, _, s) in history]
     cycles = [t for (t, _, _) in history]
