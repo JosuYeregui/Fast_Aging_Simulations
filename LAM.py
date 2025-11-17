@@ -42,9 +42,12 @@ Beta_n = param["Negative electrode LAM constant proportional term [s-1]"]
 Beta_p = param["Positive electrode LAM constant proportional term [s-1]"]
 stress_critical_n = param["Negative electrode critical stress [Pa]"]
 stress_critical_p = param["Positive electrode critical stress [Pa]"]
-
-
-
+E_p = param["Positive electrode Young\'s modulus [Pa]"]
+nu_p = param["Positive electrode Poisson\'s ratio"]
+Omega_p = param["Positive electrode partial molar volume [m3.mol-1]"]
+E_n = param["Negative electrode Young\'s modulus [Pa]"]
+nu_n = param["Negative electrode Poisson\'s ratio"]
+Omega_n = param["Negative electrode partial molar volume [m3.mol-1]"]
 
 # --------------------------------------------------------------------------------
 # 3. Build experiment: 50 charge/discharge cycles
@@ -54,9 +57,19 @@ steps = []
 for _ in range(n_cycles):
     steps.append("Charge at 1 C until 4.2 V")
     steps.append("Hold at 4.2 V until 0.02 C")
-    steps.append("Discharge at 1 C until 2.5 V")
+    steps.append("Discharge at 2 C until 2.5 V")
     # steps.append("Rest for 10 h")
+    
+for _ in range(n_cycles):
+    steps.append("Charge at 0.5 C until 4.2 V")
+    steps.append("Hold at 4.2 V until 0.02 C")
+    steps.append("Discharge at 0.5 C until 2.5 V")
+    
+    
 experiment = pybamm.Experiment(steps, period="1 second")
+
+
+
 
 # --------------------------------------------------------------------------------
 # 4. Run PyBaMM simulation
@@ -84,6 +97,15 @@ dt = np.insert(np.diff(t),0,0)
 
 stress_h_min = 0;
 
+cs_avg_n = sol["Average negative particle concentration [mol.m-3]"](t)
+cs_avg_p = sol["Average positive particle concentration [mol.m-3]"](t)
+c_surf_n = sol["X-averaged negative particle surface concentration [mol.m-3]"](t)
+c_surf_p = sol["X-averaged positive particle surface concentration [mol.m-3]"](t)
+stress_geometric_factor = 3
+stress_n_t = Omega_n*E_n*(cs_avg_n - c_surf_n) / (1 - nu_n) / stress_geometric_factor
+stress_p_t = Omega_p*E_p*(cs_avg_p - c_surf_p) / (1 - nu_p) / stress_geometric_factor
+
+
 stress_h_n = (stress_n_r + 2 * stress_n_t) / 3
 stress_h_p = (stress_p_r + 2 * stress_p_t) / 3
 j_stress_LAM_n = -Beta_n * ((stress_h_n - stress_h_min) / stress_critical_n) ** m_LAM_n * (stress_h_n > 0) * dt
@@ -107,3 +129,25 @@ plt.ylabel("Loss of active material")
 plt.xlabel("Time [h]")
 plt.grid(True)
 
+
+plt.figure(figsize=(9, 8))
+ax1 = plt.subplot(311)
+ax1.plot(t / 3600, cs_avg_n, label = "Avg")
+ax1.plot(t / 3600, c_surf_n, label =  "Surf")
+ax1.set_ylabel("NE concentrations")
+ax1.set_xlabel("Time [h]")
+ax1.grid(True)
+
+ax2 = plt.subplot(312)
+ax2.plot(t / 3600, cs_avg_p, label = "Avg")
+ax2.plot(t / 3600, c_surf_p, label =  "Surf")
+ax2.set_ylabel("PE concentrations")
+ax2.set_xlabel("Time [h]")
+ax2.grid(True)
+
+ax3 = plt.subplot(313)
+ax3.plot(t / 3600, cs_avg_n - c_surf_n, label = "Neg")
+ax3.plot(t / 3600, cs_avg_p - c_surf_p, label =  "Pos")
+ax3.set_ylabel("PE concentrations")
+ax3.set_xlabel("Time [h]")
+ax3.grid(True)
