@@ -37,7 +37,7 @@ V_sei = float(param.get("sei partial molar volume",9.585e-5))
 # --------------------------------------------------------------------------------
 # 3. Build experiment: 50 charge/discharge cycles
 # --------------------------------------------------------------------------------
-n_cycles = 1000
+n_cycles = 10
 steps = []
 for _ in range(n_cycles):
     steps.append("Charge at 1 C until 4.2 V")
