@@ -52,7 +52,41 @@ Omega_n = param["Negative electrode partial molar volume [m3.mol-1]"]
 # --------------------------------------------------------------------------------
 # 3. Build experiment: 50 charge/discharge cycles
 # --------------------------------------------------------------------------------
-n_cycles = 100
+steps = []
+steps.append("Discharge at 2 C until 2.5 V")
+steps.append("Charge at 1 C until 4.2 V")
+steps.append("Hold at 4.2 V until 0.02 C")
+experiment = pybamm.Experiment(steps, period="1 second")
+sim = pybamm.Simulation(model, parameter_values=param, experiment=experiment)
+sol = sim.solve()
+t = sol["Time [s]"].entries
+cs_avg_n = sol["Average negative particle concentration [mol.m-3]"](t)
+cs_avg_p = sol["Average positive particle concentration [mol.m-3]"](t)
+c_surf_n = sol["X-averaged negative particle surface concentration [mol.m-3]"](t)
+c_surf_p = sol["X-averaged positive particle surface concentration [mol.m-3]"](t)
+
+diff_avg_surf_n = cs_avg_n - c_surf_n;
+difference_n_2C = np.mean(diff_avg_surf_n[diff_avg_surf_n>0])
+diff_avg_surf_p = cs_avg_p - c_surf_p;
+difference_p_1C = np.mean(diff_avg_surf_p[diff_avg_surf_p>0])
+
+# steps = []
+# steps.append("Discharge at 1 C until 2.5 V")
+# experiment = pybamm.Experiment(steps, period="1 second")
+# sim = pybamm.Simulation(model, parameter_values=param, experiment=experiment)
+# sol = sim.solve()
+# t = sol["Time [s]"].entries
+# cs_avg_n = sol["Average negative particle concentration [mol.m-3]"](t)
+# cs_avg_p = sol["Average positive particle concentration [mol.m-3]"](t)
+# c_surf_n = sol["X-averaged negative particle surface concentration [mol.m-3]"](t)
+# c_surf_p = sol["X-averaged positive particle surface concentration [mol.m-3]"](t)
+
+# difference_n_1C = np.mean(cs_avg_n - c_surf_n)
+# # difference_p = np.mean(cs_avg_p - c_surf_p)
+
+
+
+n_cycles = 10
 steps = []
 for _ in range(n_cycles):
     steps.append("Discharge at 2 C until 2.5 V")
@@ -116,22 +150,35 @@ Ds_p = 4e-13
 # Ds_p_fun = param["Positive electrode diffusivity [m2.s-1]"];
 # Ds_p = Ds_p_fun(0.5,298.15)
 
-I_single = np.concatenate([
-    np.ones(1800) * 8,
-    -2 * np.ones(5300)
+# I_single = np.concatenate([
+#     np.ones(1800) * 8,
+#     -2 * np.ones(5300)
+# ])
+
+# I = np.tile(I_single, n_cycles)  # repeat waveform n_cycles times
+
+# # I = sol["Current [A]"](t)
+# # j_p_sol = sol["X-averaged positive electrode interfacial current density [A.m-2]"](t)
+# # j_n_sol = sol["X-averaged negative electrode interfacial current density [A.m-2]"](t)
+
+# j_n = I / as_n / F / L_n / Aelec
+# j_p = - I / as_p / F / L_p / Aelec
+
+# cs_diff_n = j_n * Rs_n / 5 / Ds_n #cs_avg_n - c_surf_n
+# cs_diff_p = j_p * Rs_p / 5 / Ds_p #cs_avg_n - c_surf_n
+cs_diff_n_1 = np.concatenate([
+    np.ones(1800) * difference_n_2C,
+    0 * np.ones(5300)
 ])
+cs_diff_n = np.tile(cs_diff_n_1, n_cycles)
 
-I = np.tile(I_single, n_cycles)  # repeat waveform n_cycles times
 
-# I = sol["Current [A]"](t)
-# j_p_sol = sol["X-averaged positive electrode interfacial current density [A.m-2]"](t)
-# j_n_sol = sol["X-averaged negative electrode interfacial current density [A.m-2]"](t)
+cs_diff_p_1 = np.concatenate([
+    np.ones(1800) * 0,
+    difference_p_1C * np.ones(5300)
+])
+cs_diff_p = np.tile(cs_diff_p_1, n_cycles)
 
-j_n = I / as_n / F / L_n / Aelec
-j_p = - I / as_p / F / L_p / Aelec
-
-cs_diff_n = j_n * Rs_n / 5 / Ds_n #cs_avg_n - c_surf_n
-cs_diff_p = j_p * Rs_p / 5 / Ds_p #cs_avg_n - c_surf_n
 stress_geometric_factor = 3
 stress_n_t = Omega_n*E_n*(cs_diff_n) / (1 - nu_n) / stress_geometric_factor
 stress_p_t = Omega_p*E_p*(cs_diff_p) / (1 - nu_p) / stress_geometric_factor
