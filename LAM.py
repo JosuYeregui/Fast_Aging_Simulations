@@ -52,7 +52,7 @@ Omega_n = param["Negative electrode partial molar volume [m3.mol-1]"]
 # --------------------------------------------------------------------------------
 # 3. Build experiment: 50 charge/discharge cycles
 # --------------------------------------------------------------------------------
-n_cycles = 1
+n_cycles = 100
 steps = []
 for _ in range(n_cycles):
     steps.append("Discharge at 2 C until 2.5 V")
@@ -187,5 +187,4 @@ ax3.plot(t/3600, cs_diff_p[0:len(t)])
 ax3.set_ylabel("PE concentrations")
 ax3.set_xlabel("Time [h]")
 ax3.grid(True)
-plt.show()
 
