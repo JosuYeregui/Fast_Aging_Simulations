@@ -54,7 +54,7 @@ class Step:
 
     def _obtain_IaveCV(self, soc0, R, Q_nom, OCV, I_cut):
         soc_est = 1. if self.I > 0 else 0.
-        b = (self.V_end - OCV(soc0) ) / (soc_est - soc0)
+        b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
 
         t_end = -np.log(I_cut / self.I) * (R * Q_nom) / b
 
@@ -97,7 +97,6 @@ class Cycler:
         self.R = R
         self.Q = Q
         self.OCV = OCV_fn
-        self.funcs = []
         self.times = []
         self.total_time = 0.0
         self._build()

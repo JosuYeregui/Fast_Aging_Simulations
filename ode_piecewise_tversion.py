@@ -119,7 +119,7 @@ def integration(L0, t, input_vars):
 # sol_baseline.cycles[-1].steps[-1].y_slices
 if __name__ == "__main__":
 
-    tot_cycles = 1000 # Total cycles to simulate
+    tot_cycles = 10 # Total cycles to simulate
 
     experiment_baseline = pybamm.Experiment(
         [(
