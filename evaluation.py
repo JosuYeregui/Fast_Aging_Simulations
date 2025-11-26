@@ -2,7 +2,7 @@ import time
 from matplotlib import pyplot as plt
 
 from main import scipy_rk23_integrate
-from utils.degradation_models import cast_params_for_SEI
+from utils.degradation_models import cast_params_for_SEI, cast_params_for_LAM
 from utils.cycler import CCStep, CCCVStep, Cycler
 from utils.characterize import *
 
@@ -24,7 +24,11 @@ if __name__ == "__main__":
 
     tot_cycles = 1000
 
-    param = pybamm.ParameterValues("Chen2020")
+    param_chen = pybamm.ParameterValues("Chen2020")
+    param = pybamm.ParameterValues("OKane2022")
+    param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
+    param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
+    param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
 
     experiment_baseline = pybamm.Experiment(
         [(
@@ -61,11 +65,14 @@ if __name__ == "__main__":
     )
 
     L0 = float(param.get("initial sei thickness", 5e-9))
+    eps_0_n = param["Negative electrode active material volume fraction"]
+    eps_0_p = param["Positive electrode active material volume fraction"]
 
-    y0_vec = [L0]
+    y0_vec = [L0, eps_0_n, eps_0_p]
 
     input_vars = {}
     input_vars = cast_params_for_SEI(param, input_vars)
+    input_vars = cast_params_for_LAM(param, input_vars)
 
     start_ode_time = time.time()
     history = scipy_rk23_integrate(
@@ -82,7 +89,9 @@ if __name__ == "__main__":
     print("ODE + integration time: ", ode_time)
 
     t_ode = [h[0] for h in history]
-    L_ode = [h[1] for h in history]
+    L_ode = [h[1][0] for h in history]
+    eps_n_ode = [h[1][1] for h in history]
+    eps_p_ode = [h[1][2] for h in history]
 
     L_bs = []
     t_baseline = []
@@ -99,5 +108,17 @@ if __name__ == "__main__":
     #           c="red")
     ax.set_xlabel("t [h]")
     ax.set_ylabel("L SEI [m]")
+    plt.legend()
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.scatter(np.asarray(t_ode) / 3600., eps_n_ode, label="\epsilon_n ODE",
+               c="blue")
+    ax.scatter(np.asarray(t_ode) / 3600., eps_p_ode, label="\epsilon_p ODE",
+               c="orange")
+    # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
+    #           c="red")
+    ax.set_xlabel("t [h]")
+    ax.set_ylabel("\epsilon")
     plt.legend()
     plt.show()

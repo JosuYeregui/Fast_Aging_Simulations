@@ -1,14 +1,78 @@
 import numpy as np
 import pybamm
 
-def get_dif(L0, t, cycler, input_vars):
+# def get_dif(y, t, cycler, input_vars):
+#
+#     L0 = y[0]
+#
+#     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
+#     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
+#
+#     deps_dt_n = stressLAM_deps_dt(t, cycler, input_vars, "n")
+#
+#     deps_dt_p = stressLAM_deps_dt(t, cycler, input_vars, "p")
+#
+#     return [L - L0, deps_dt_n, deps_dt_p]
+
+def get_dif(y, t, cycler, input_vars):
+
+    L0 = y[0]
 
     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
+
     return L - L0
 
 def cast_params_for_LAM(param, input_vars):
+
+    names = {"Negative": "n", "Positive": "p"}
+    for k, domain in names.items():
+        input_vars["Omega_"+domain] = param[k + " electrode partial molar volume [m3.mol-1]"]
+        input_vars["omega_fact_" + domain] = 3
+        input_vars["E_"+domain] = param[k + " electrode Young\'s modulus [Pa]"]
+        input_vars["nu_"+domain] = param[k + " electrode Poisson\'s ratio"]
+        input_vars["stress_critical_"+domain] = param[k + " electrode critical stress [Pa]"]
+        input_vars["Beta_"+domain] = param[k + " electrode LAM constant proportional term [s-1]"] / 1000.
+        input_vars["m_"+domain] = param[k + " electrode LAM constant exponential term"]
+
+        D = param[k + " electrode diffusivity [m2.s-1]"]
+        R = param[k + " particle radius [m]"]
+        eps = param[k + " electrode active material volume fraction"]
+        L = param[k + " electrode thickness [m]"]
+        F = 96485.33212
+
+        as_particle = eps * 3 / R
+
+        def cs_cave(I):
+            j = I / (F * as_particle * L)
+            return -j / 5 * R / D
+
+        input_vars["cs_cave_"+domain] = cs_cave
+
     return input_vars
+
+def stressLAM_deps_dt(t, cycler, input_vars, domain):
+    I, _ = cycler(t/3600.)
+
+    cs_cave = input_vars["cs_cave_"+domain](I)
+    Omega = input_vars["Omega_"+domain]
+    E = input_vars["E_"+domain]
+    nu = input_vars["nu_"+domain]
+    stress_geometric_factor = input_vars["omega_fact_"+domain]
+
+    stress_t = Omega * E * cs_cave / (1 - nu) / stress_geometric_factor
+    stress_r = 0.
+
+    stress_h = (stress_r + 2 * stress_t) / 3
+
+    stress_critial = input_vars["stress_critical_"+domain]
+    m = input_vars["m_"+domain]
+    Beta = input_vars["Beta_"+domain]
+
+    deps_dt = -Beta * np.abs(stress_h / stress_critial) ** m * (
+            stress_h > 0)
+
+    return deps_dt
 
 def cast_params_for_SEI(param, input_vars):
 
@@ -20,7 +84,7 @@ def cast_params_for_SEI(param, input_vars):
     F = float(param.get("Faraday constant [C.mol-1]", 96485.33212))
     R = float(param.get("Ideal gas constant [J.mol-1.K-1]", 8.314462618))
     T = float(param.get("Ambient temperature [K]", 298.15))
-    V_sei = float(param.get("SEI partial molar volume", 9.585e-5))
+    V_sei = float(param.get("SEI partial molar volume [m3.mol-1]", 9.585e-5))
     x_0, x_100, _, _ = pybamm.lithium_ion.get_min_max_stoichiometries(param)
     OCP_n = param["Negative electrode OCP [V]"]
 
@@ -36,11 +100,11 @@ def cast_params_for_SEI(param, input_vars):
         k_exp_val = exp_vals * k_sei
         return k_exp_val
 
-    A = c_ec * V_sei / 2
+    A_ec = c_ec * V_sei / 2
 
     input_vars["k_exp"] = k_exp
-    input_vars["A"] = A
-    input_vars["D"] = D_ec
+    input_vars["A_ec"] = A_ec
+    input_vars["D_ec"] = D_ec
 
     return input_vars
 
@@ -50,8 +114,8 @@ def tfunc_integration_LSEI(L0, t, cycler, input_vars):
     treating nearly-constant k segments analytically.
     """
     k_exp_t = input_vars["k_exp"]
-    D = input_vars["D"]
-    A = input_vars["A"]
+    D_ec = input_vars["D_ec"]
+    A_ec = input_vars["A_ec"]
 
     dt = 1.
 
@@ -60,7 +124,7 @@ def tfunc_integration_LSEI(L0, t, cycler, input_vars):
 
     # Normal small-step exact update with local k
     k_mid = 0.5 * (k_exp_t(soc) + k_exp_t(soc_dt))
-    L= (-D + np.sqrt(D**2 + 2*k_mid*(D*L0 + 0.5*k_mid*L0**2 + A*D*k_mid*dt))) / k_mid
+    L= (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L0 + 0.5*k_mid*L0**2 + A_ec*D_ec*k_mid*dt))) / k_mid
     return L
 
 def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5):
@@ -69,8 +133,8 @@ def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5
     treating nearly-constant k segments analytically.
     """
     k_exp_fn = input_vars["k_exp"]
-    D = input_vars["D"]
-    A = input_vars["A"]
+    D_ec = input_vars["D_ec"]
+    A_ec = input_vars["A_ec"]
 
     t = np.arange(0, cycler.total_time*3600., 10)
 
@@ -114,14 +178,14 @@ def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5
             dt_plateau = t[i_end] - t[i_start]
             Li = L[i_start]
             # Exact constant-k update
-            L_next = (-D + np.sqrt(D**2 + 2*k_plateau*(D*Li + 0.5*k_plateau*Li**2 + A*D*k_plateau*dt_plateau))) / k_plateau
+            L_next = (-D_ec + np.sqrt(D_ec**2 + 2*k_plateau*(D_ec*Li + 0.5*k_plateau*Li**2 + A_ec*D_ec*k_plateau*dt_plateau))) / k_plateau
             L[i_start+1:i_end+1] = L_next
             i = i_end
             seg_idx += 1
         else:
             # Normal small-step exact update with local k
             k_mid = 0.5 * (k_exp_t[i] + k_exp_t[i+1])
-            L[i+1] = (-D + np.sqrt(D**2 + 2*k_mid*(D*L[i] + 0.5*k_mid*L[i]**2 + A*D*k_mid*dt[i]))) / k_mid
+            L[i+1] = (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L[i] + 0.5*k_mid*L[i]**2 + A_ec*D_ec*k_mid*dt[i]))) / k_mid
             # L_anal = (-D_ec + np.sqrt((D_ec + k_exp * L0)**2 + 2 * A * D_ec * k_exp ** 2 * t)) / k_exp
 
             i += 1

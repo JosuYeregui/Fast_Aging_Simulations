@@ -37,10 +37,13 @@ class Step:
         V_ocv = OCV(soc_array)
         V_tar = self.V_end - I_avg * R
 
-        if np.sign(I_avg) == 1:
-            idx_cross = np.where(V_ocv > V_tar)[0][0]
-        else:
-            idx_cross = np.where(V_ocv < V_tar)[0][0]
+        try:
+            if np.sign(I_avg) == 1:
+                idx_cross = np.where(V_ocv > V_tar)[0][0]
+            else:
+                idx_cross = np.where(V_ocv < V_tar)[0][0]
+        except:
+            idx_cross = 0
 
         if idx_cross == 0:
             t_end = dt
