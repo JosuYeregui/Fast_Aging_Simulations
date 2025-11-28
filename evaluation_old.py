@@ -22,7 +22,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 10
+    tot_cycles = 100
 
     param_chen = pybamm.ParameterValues("Chen2020")
 
@@ -30,15 +30,17 @@ if __name__ == "__main__":
     param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
     param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
+    #param["Ratio of lithium moles to SEI moles"] = 2.
 
-    # param = pybamm.ParameterValues("Mohtat2020")
+    #param = pybamm.ParameterValues("Mohtat2020")
+    #param = pybamm.ParameterValues("Chen2020")
 
     experiment_baseline = pybamm.Experiment(
         [(
-            "Charge at 1.5 A until 3.5 V",
-            "Charge at 3 A until 4.2 V",
+            "Charge at 1 A until 3.5 V",
+            "Charge at 1 A until 4.2 V",
             "Hold at 4.2 V until 0.2 A",
-            "Discharge at 5 A until 3 V",)
+            "Discharge at 1 A until 3 V",)
         ] * tot_cycles
     )
 
@@ -54,9 +56,9 @@ if __name__ == "__main__":
     OCV_fn = get_OVC_func(param)
 
     steps = [
-        CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=3, V_end=4.2, Cutoff_I=0.2),
-        CCStep(I=-5, V_end=3.)
+        CCStep(I=1, V_end=3.5),
+        CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2),
+        CCStep(I=-1, V_end=3.)
     ]
 
     cycl = Cycler(
@@ -80,7 +82,7 @@ if __name__ == "__main__":
     history = scipy_rk23_integrate(
         y0_vec=y0_vec,
         input_vars=input_vars,
-        t_final=float(tot_cycles) * cycl.total_time * 3600.,  # e.g. 1000
+        t_final=float(tot_cycles),# * cycl.total_time * 3600.,  # e.g. 1000
         cycler=cycl,
         rtol=1e-9,
         atol=1e-9,
@@ -102,10 +104,10 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
-    ax.scatter(np.asarray(t_ode) / 3600., L_ode, label="ODE",
-               c="red")
-    #ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
+    #ax.scatter(np.asarray(t_ode) / 3600., L_ode, label="ODE",
     #           c="red")
+    ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
+               c="red")
     ax.set_xlabel("t [h]")
     ax.set_ylabel("L SEI [m]")
     plt.legend()

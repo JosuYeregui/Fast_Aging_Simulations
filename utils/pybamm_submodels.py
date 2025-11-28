@@ -17,10 +17,10 @@ def update_LAM_params(param):
         "Positive critical stress [Pa]": param["Positive electrode critical stress [Pa]"],
         "Negative stress geometric factor": 3,
         "Positive stress geometric factor": 3,
-        "Negative LAM constant proportional term": param["Negative electrode LAM constant proportional term [s-1]"],
-        "Positive LAM constant proportional term": param["Positive electrode LAM constant proportional term [s-1]"],
-        "Negative LAM constant exponential term": param["Negative electrode LAM constant exponential term"] / 1000.,
-        "Positive LAM constant exponential term": param["Positive electrode LAM constant exponential term"] / 1000.,
+        "Negative LAM constant proportional term": param["Negative electrode LAM constant proportional term [s-1]"]*10,
+        "Positive LAM constant proportional term": param["Positive electrode LAM constant proportional term [s-1]"]/100,
+        "Negative LAM constant exponential term": param["Negative electrode LAM constant exponential term"],
+        "Positive LAM constant exponential term": param["Positive electrode LAM constant exponential term"],
         "Negative Poisson's ratio": param["Negative electrode Poisson's ratio"],
         "Positive Poisson's ratio": param["Positive electrode Poisson's ratio"],
     }, check_already_exists=False)
@@ -46,6 +46,8 @@ class StressBasedLAM(BaseModel):
     def get_coupled_variables(self, variables):
         domain, Domain = self.domain_Domain
 
+        eps = variables[f"X-averaged {domain} electrode active material volume fraction"]
+
         c_s = variables[f"X-averaged {domain} particle surface concentration [mol.m-3]"]
         c_avg = pybamm.x_average(variables[f"R-averaged {domain} particle concentration [mol.m-3]"])
 
@@ -67,9 +69,8 @@ class StressBasedLAM(BaseModel):
                     stress_h > 0) # deps_dt = -k * stress_guarro
 
         variables.update(
-            self._get_standard_active_material_change_variables(deps_dt)
+            self._get_standard_active_material_change_variables(deps_dt),
         )
-
         return variables
 
     def set_rhs(self, variables):

@@ -24,7 +24,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
     solver = RK23(rhs, t0=0.0, y0=y0_vec, t_bound=t_final,
                   max_step=max_step, rtol=rtol, atol=atol)
 
-    history = [(0.0, y0_vec[0])]
+    history = [(0.0, y0_vec)]
 
     while solver.status == "running":
         solver.step()
@@ -32,7 +32,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
         t = solver.t
         y = solver.y.copy()          # full cycle solution used at this step
 
-        history.append((t, y[0]))
+        history.append((t, y))
 
         # Optional early stopping
         if stop_condition_fn is not None:

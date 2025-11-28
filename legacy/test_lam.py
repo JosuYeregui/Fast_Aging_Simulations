@@ -105,7 +105,10 @@ model = pybamm.lithium_ion.SPMe(build=False)
 #         "loss of active material": "current-driven",
 #     }
 # )
+param_chen = pybamm.ParameterValues("Chen2020")
 param = pybamm.ParameterValues("OKane2022")
+param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
+param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
 # param.update(
 #     {
 #         "Positive electrode current-driven LAM rate": current_LAM,
@@ -125,10 +128,10 @@ param.update({
     "Positive critical stress [Pa]": param["Positive electrode critical stress [Pa]"],
     "Negative stress geometric factor": 3,
     "Positive stress geometric factor": 3,
-    "Negative LAM constant proportional term": param["Negative electrode LAM constant proportional term [s-1]"],
-    "Positive LAM constant proportional term": param["Positive electrode LAM constant proportional term [s-1]"],
-    "Negative LAM constant exponential term": param["Negative electrode LAM constant exponential term"]/1000.,
-    "Positive LAM constant exponential term": param["Positive electrode LAM constant exponential term"]/1000.,
+    "Negative LAM constant proportional term": param["Negative electrode LAM constant proportional term [s-1]"]/1000.,
+    "Positive LAM constant proportional term": param["Positive electrode LAM constant proportional term [s-1]"]/1000.,
+    "Negative LAM constant exponential term": param["Negative electrode LAM constant exponential term"],
+    "Positive LAM constant exponential term": param["Positive electrode LAM constant exponential term"],
     "Negative Poisson's ratio": param["Negative electrode Poisson's ratio"],
     "Positive Poisson's ratio": param["Positive electrode Poisson's ratio"],
 }, check_already_exists=False)
@@ -148,7 +151,7 @@ model.submodels["Positive active material"] = StressBasedLAM(
 #model.submodels["Positive active material"] = StressBasedLAM_FP(model.param, "Positive", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
 model.build_model()
 
-experiment = pybamm.Experiment(["Charge at 1 C until 4.2 V", "Rest for 1 hour", "Discharge at 1 C until 2.5 V"]*100)
+experiment = pybamm.Experiment(["Charge at 1.5 A until 4.2 V", "Rest for 1 hour", "Discharge at 1 A until 2.5 V"]*1)
 
 sim = pybamm.Simulation(model, experiment=experiment, parameter_values=param)
 

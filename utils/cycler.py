@@ -126,6 +126,16 @@ class Cycler:
 
         return self.steps[idx](t_in)
 
+    def call_warro(self, domain):
+        num = np.asarray([self.steps[idx].I_avg * self.times[idx + 1] for idx, _ in enumerate(self.times[1:])])
+        if domain == "p":
+            num[num > 0] = 0
+        else:
+            num[num < 0] = 0
+        den = np.sum(self.times)
+
+        return np.sum(num) / den
+
     def update_cycle(self, R, Q, OCV_fn):
         self.R = R
         self.Q = Q

@@ -5,6 +5,7 @@ from main import scipy_rk23_integrate
 from utils.degradation_models import cast_params_for_SEI, cast_params_for_LAM
 from utils.cycler import CCStep, CCCVStep, Cycler
 from utils.characterize import *
+from utils.pybamm_submodels import *
 
 def extract_y0_yend(sol):
     res = extract_y_from_solution(sol)
@@ -22,13 +23,16 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 1000
+    tot_cycles = 100
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
     param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
     param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
+    # param["Ratio of lithium moles to SEI moles"] = 2.
+
+    param = update_LAM_params(param)
 
     experiment_baseline = pybamm.Experiment(
         [(
@@ -39,8 +43,22 @@ if __name__ == "__main__":
         ] * tot_cycles
     )
 
-    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"})
+    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
+
+    model.submodels["Negative active material"] = StressBasedLAM(
+        model.param, "Negative"
+    )
+
+    # model.submodels["Negative active material"] = StressBasedLAM_FP(model.param, "Negative", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
+
+    model.submodels["Positive active material"] = StressBasedLAM(
+        model.param, "Positive"
+    )
+
+    model.build_model()
+
     sim_baseline = pybamm.Simulation(model, experiment=experiment_baseline, parameter_values=param)
+
     start_time = time.time()
     sol_baseline = sim_baseline.solve(initial_soc=0.1)
     end_time = time.time()
@@ -80,8 +98,8 @@ if __name__ == "__main__":
         input_vars=input_vars,
         t_final=float(tot_cycles) * cycl.total_time * 3600.,  # e.g. 1000
         cycler=cycl,
-        rtol=1e-9,
-        atol=1e-9,
+        rtol=[1e-3, 1e-3, 1e-3],
+        atol=[1e-9 ,1e-4, 1e-4],
         stop_condition_fn=None,  # optional early-stop
         max_step=None
     )
@@ -94,10 +112,14 @@ if __name__ == "__main__":
     eps_p_ode = [h[1][2] for h in history]
 
     L_bs = []
+    eps_n_bs = []
+    eps_p_bs = []
     t_baseline = []
     for s in sol_baseline.cycles:
         y, _ = extract_y0_yend(s)
         L_bs.append(y["L_sei"])
+        eps_n_bs.append(y["eps_n"])
+        eps_p_bs.append(y["eps_p"])
         t_baseline.append(s["Time [h]"].entries[0])
 
     fig, ax = plt.subplots()
@@ -112,8 +134,10 @@ if __name__ == "__main__":
     plt.show()
 
     fig, ax = plt.subplots()
+    ax.plot(t_baseline, eps_n_bs, label="Baseline", color="blue")
     ax.scatter(np.asarray(t_ode) / 3600., eps_n_ode, label="\epsilon_n ODE",
                c="blue")
+    ax.plot(t_baseline, eps_p_bs, label="Baseline", color="orange")
     ax.scatter(np.asarray(t_ode) / 3600., eps_p_ode, label="\epsilon_p ODE",
                c="orange")
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",

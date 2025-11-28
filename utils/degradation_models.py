@@ -1,19 +1,6 @@
 import numpy as np
 import pybamm
 
-# def get_dif(y, t, cycler, input_vars):
-#
-#     L0 = y[0]
-#
-#     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
-#     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
-#
-#     deps_dt_n = stressLAM_deps_dt(t, cycler, input_vars, "n")
-#
-#     deps_dt_p = stressLAM_deps_dt(t, cycler, input_vars, "p")
-#
-#     return [L - L0, deps_dt_n, deps_dt_p]
-
 def get_dif(y, t, cycler, input_vars):
 
     L0 = y[0]
@@ -21,7 +8,30 @@ def get_dif(y, t, cycler, input_vars):
     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
 
-    return L - L0
+    deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
+
+    deps_dt_p = stressLAM_deps_dt(t, y[2], cycler, input_vars, "p")
+
+    # t_array = np.linspace(t, t + cycler.total_time*3600., 100)
+    # deps_dt_n = []
+    # deps_dt_p = []
+    # for t_ in t_array:
+    #     deps_dt_n.append(stressLAM_deps_dt(t_, y[1], cycler, input_vars, "n"))
+    #
+    #     deps_dt_p.append(stressLAM_deps_dt(t_, y[2], cycler, input_vars, "p"))
+    # deps_dt_n = np.mean(deps_dt_n)
+    # deps_dt_p = np.mean(deps_dt_p)
+
+    return [L - L0, deps_dt_n, deps_dt_p]
+
+# def get_dif(y, t, cycler, input_vars):
+#
+#     L0 = y[0]
+#
+#     #L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
+#     L = piecewise_integration_LSEI(L0, cycler, input_vars)
+#
+#     return L - L0
 
 def cast_params_for_LAM(param, input_vars):
 
@@ -32,29 +42,36 @@ def cast_params_for_LAM(param, input_vars):
         input_vars["E_"+domain] = param[k + " electrode Young\'s modulus [Pa]"]
         input_vars["nu_"+domain] = param[k + " electrode Poisson\'s ratio"]
         input_vars["stress_critical_"+domain] = param[k + " electrode critical stress [Pa]"]
-        input_vars["Beta_"+domain] = param[k + " electrode LAM constant proportional term [s-1]"] / 1000.
+        input_vars["Beta_"+domain] = param[k + " electrode LAM constant proportional term [s-1]"]
         input_vars["m_"+domain] = param[k + " electrode LAM constant exponential term"]
 
         D = param[k + " electrode diffusivity [m2.s-1]"]
         R = param[k + " particle radius [m]"]
-        eps = param[k + " electrode active material volume fraction"]
         L = param[k + " electrode thickness [m]"]
+        eps_warro = param[k + " electrode active material volume fraction"]
+        A = param["Electrode height [m]"] * param["Electrode width [m]"]
         F = 96485.33212
 
-        as_particle = eps * 3 / R
-
-        def cs_cave(I):
-            j = I / (F * as_particle * L)
+        def cs_cave(I, eps, domain):
+            as_particle = eps * 3 / R
+            I = -I
+            if domain == "n":
+                j = I / (F * as_particle * L * A)
+            else:
+                j = -I / (F * as_particle * L * A)
             return -j / 5 * R / D
 
         input_vars["cs_cave_"+domain] = cs_cave
+    input_vars["Beta_n"] *=10.
+    input_vars["Beta_p"] /=100.
 
     return input_vars
 
-def stressLAM_deps_dt(t, cycler, input_vars, domain):
-    I, _ = cycler(t/3600.)
+def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
+    #I, _ = cycler(t/3600.)
+    I = cycler.call_warro(domain)
 
-    cs_cave = input_vars["cs_cave_"+domain](I)
+    cs_cave = input_vars["cs_cave_"+domain](I, eps, domain)
     Omega = input_vars["Omega_"+domain]
     E = input_vars["E_"+domain]
     nu = input_vars["nu_"+domain]
@@ -65,12 +82,14 @@ def stressLAM_deps_dt(t, cycler, input_vars, domain):
 
     stress_h = (stress_r + 2 * stress_t) / 3
 
+    if stress_h <= 0:
+        return 0.
+
     stress_critial = input_vars["stress_critical_"+domain]
     m = input_vars["m_"+domain]
     Beta = input_vars["Beta_"+domain]
 
-    deps_dt = -Beta * np.abs(stress_h / stress_critial) ** m * (
-            stress_h > 0)
+    deps_dt = -Beta * np.abs(stress_h / stress_critial) ** m
 
     return deps_dt
 
@@ -85,6 +104,7 @@ def cast_params_for_SEI(param, input_vars):
     R = float(param.get("Ideal gas constant [J.mol-1.K-1]", 8.314462618))
     T = float(param.get("Ambient temperature [K]", 298.15))
     V_sei = float(param.get("SEI partial molar volume [m3.mol-1]", 9.585e-5))
+    z = float(param.get("Ratio of lithium moles to SEI moles", 2.))
     x_0, x_100, _, _ = pybamm.lithium_ion.get_min_max_stoichiometries(param)
     OCP_n = param["Negative electrode OCP [V]"]
 
@@ -100,7 +120,7 @@ def cast_params_for_SEI(param, input_vars):
         k_exp_val = exp_vals * k_sei
         return k_exp_val
 
-    A_ec = c_ec * V_sei / 2
+    A_ec = c_ec * V_sei / z
 
     input_vars["k_exp"] = k_exp
     input_vars["A_ec"] = A_ec
