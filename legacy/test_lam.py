@@ -151,24 +151,72 @@ model.submodels["Positive active material"] = StressBasedLAM(
 #model.submodels["Positive active material"] = StressBasedLAM_FP(model.param, "Positive", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
 model.build_model()
 
-experiment = pybamm.Experiment(["Charge at 1.5 A until 4.2 V", "Rest for 1 hour", "Discharge at 1 A until 2.5 V"]*1)
+experiment = pybamm.Experiment(["Charge at 1.5 A until 4.2 V", "Rest for 1 hour", "Discharge at 1 A until 2.5 V"]*100)
 
 sim = pybamm.Simulation(model, experiment=experiment, parameter_values=param)
 
 sol = sim.solve(initial_soc=0.)
 
 # Get surface and average negative electrode concentrations
-c_ave = sol["Average negative particle concentration [mol.m-3]"].entries
-c_surf = sol["X-averaged negative particle surface concentration [mol.m-3]"].entries
-c_ave_p = sol["Average positive particle concentration [mol.m-3]"].entries
-c_surf_p = sol["X-averaged positive particle surface concentration [mol.m-3]"].entries
+c_ave = sol.cycles[0]["Average negative particle concentration [mol.m-3]"].entries
+c_surf = sol.cycles[0]["X-averaged negative particle surface concentration [mol.m-3]"].entries
+c_ave_p = sol.cycles[0]["Average positive particle concentration [mol.m-3]"].entries
+c_surf_p = sol.cycles[0]["X-averaged positive particle surface concentration [mol.m-3]"].entries
 # lam = sol["X-averaged negative electrode active material volume fraction"].entries
 # lam = sol["Negative active material fraction"].entries
 # lam = sol["Negative electrode active material volume fraction"].entries
-lam = sol["X-averaged positive electrode active material volume fraction"].entries
-lam_2 = sol["X-averaged negative electrode active material volume fraction"].entries
-LAM_true = sol["Negative electrode capacity [A.h]"].entries
-I = sol["Current [A]"].entries
+lam = sol.cycles[0]["X-averaged positive electrode active material volume fraction"].entries
+lam_2 = sol.cycles[0]["X-averaged negative electrode active material volume fraction"].entries
+LAM_true = sol.cycles[0]["Negative electrode capacity [A.h]"].entries
+I = sol.cycles[0]["Current [A]"].entries
+
+fig, ax = plt.subplots()
+ax.plot(c_surf)
+ax.plot(c_ave)
+ax2 = ax.twinx()
+ax2.plot(c_ave - c_surf, color="red")
+plt.show()
+
+fig, ax = plt.subplots()
+ax.plot(c_surf_p)
+ax.plot(c_ave_p)
+ax2 = ax.twinx()
+ax2.plot(c_ave_p - c_surf_p, color="red")
+plt.show()
+
+fig, ax = plt.subplots()
+ax.plot(lam, label="LAM_p")
+#ax.plot(lam_2, label="LAM_n")
+ax.set_xlabel("Index")
+ax.set_ylabel("lam", color="blue")
+ax.legend()
+ax2 = ax.twinx()
+ax2.plot(LAM_true, color="red")
+ax2.set_ylabel("Q", color="red")
+plt.show()
+
+fig, ax = plt.subplots()
+#ax.plot(lam, label="LAM_p")
+ax.plot(lam_2, label="LAM_n")
+ax.set_xlabel("Index")
+ax.set_ylabel("lam", color="blue")
+ax.legend()
+ax2 = ax.twinx()
+ax2.plot(LAM_true, color="red")
+ax2.set_ylabel("Q", color="red")
+plt.show()
+
+c_ave = sol.cycles[-1]["Average negative particle concentration [mol.m-3]"].entries
+c_surf = sol.cycles[-1]["X-averaged negative particle surface concentration [mol.m-3]"].entries
+c_ave_p = sol.cycles[-1]["Average positive particle concentration [mol.m-3]"].entries
+c_surf_p = sol.cycles[-1]["X-averaged positive particle surface concentration [mol.m-3]"].entries
+# lam = sol["X-averaged negative electrode active material volume fraction"].entries
+# lam = sol["Negative active material fraction"].entries
+# lam = sol["Negative electrode active material volume fraction"].entries
+lam = sol.cycles[-1]["X-averaged positive electrode active material volume fraction"].entries
+lam_2 = sol.cycles[-1]["X-averaged negative electrode active material volume fraction"].entries
+LAM_true = sol.cycles[-1]["Negative electrode capacity [A.h]"].entries
+I = sol.cycles[-1]["Current [A]"].entries
 
 fig, ax = plt.subplots()
 ax.plot(c_surf)

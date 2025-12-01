@@ -62,8 +62,8 @@ def cast_params_for_LAM(param, input_vars):
             return -j / 5 * R / D
 
         input_vars["cs_cave_"+domain] = cs_cave
-    input_vars["Beta_n"] *=10.
-    input_vars["Beta_p"] /=100.
+    input_vars["Beta_n"] /=100.
+    input_vars["Beta_p"] /=1000.
 
     return input_vars
 
@@ -107,6 +107,7 @@ def cast_params_for_SEI(param, input_vars):
     z = float(param.get("Ratio of lithium moles to SEI moles", 2.))
     x_0, x_100, _, _ = pybamm.lithium_ion.get_min_max_stoichiometries(param)
     OCP_n = param["Negative electrode OCP [V]"]
+    rho_SEI = param["SEI resistivity [Ohm.m]"]
 
     def k_exp(soc):
 
@@ -125,6 +126,7 @@ def cast_params_for_SEI(param, input_vars):
     input_vars["k_exp"] = k_exp
     input_vars["A_ec"] = A_ec
     input_vars["D_ec"] = D_ec
+    input_vars["rho_SEI"] = rho_SEI
 
     return input_vars
 

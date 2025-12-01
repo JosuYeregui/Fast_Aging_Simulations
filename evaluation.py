@@ -23,7 +23,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 100
+    tot_cycles = 1000
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -31,6 +31,8 @@ if __name__ == "__main__":
     param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
     # param["Ratio of lithium moles to SEI moles"] = 2.
+
+    param["EC diffusivity [m2.s-1]"] /= 1000000
 
     param = update_LAM_params(param)
 
@@ -73,7 +75,7 @@ if __name__ == "__main__":
         CCCVStep(I=3, V_end=4.2, Cutoff_I=0.2),
         CCStep(I=-5, V_end=3.)
     ]
-
+    from copy import deepcopy as copy
     cycl = Cycler(
         steps=steps,
         SOC0=0.1,
@@ -98,6 +100,7 @@ if __name__ == "__main__":
         input_vars=input_vars,
         t_final=float(tot_cycles) * cycl.total_time * 3600.,  # e.g. 1000
         cycler=cycl,
+        param=param,
         rtol=[1e-3, 1e-3, 1e-3],
         atol=[1e-9 ,1e-4, 1e-4],
         stop_condition_fn=None,  # optional early-stop
@@ -110,6 +113,7 @@ if __name__ == "__main__":
     L_ode = [h[1][0] for h in history]
     eps_n_ode = [h[1][1] for h in history]
     eps_p_ode = [h[1][2] for h in history]
+    t_final_evol = [h[2] for h in history]
 
     L_bs = []
     eps_n_bs = []
@@ -145,4 +149,18 @@ if __name__ == "__main__":
     ax.set_xlabel("t [h]")
     ax.set_ylabel("\epsilon")
     plt.legend()
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(np.asarray(t_ode) / 3600., t_final_evol)
+    # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
+    #           c="red")
+    ax.set_xlabel("t [h]")
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(np.diff(t_baseline))
+    # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
+    #           c="red")
+    ax.set_xlabel("t [h]")
     plt.show()

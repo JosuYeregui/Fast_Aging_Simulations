@@ -31,9 +31,9 @@ class Step:
         I_avg = self.I
 
         if np.sign(I_avg) == 1:
-            soc_array = np.arange(soc0, 1, step=dt * I_avg / Q_nom)
+            soc_array = np.arange(soc0, 1.01, step=dt * I_avg / Q_nom)
         else:
-            soc_array = np.arange(soc0, 0, step=dt * I_avg / Q_nom)
+            soc_array = np.arange(soc0, -0.01, step=dt * I_avg / Q_nom)
         V_ocv = OCV(soc_array)
         V_tar = self.V_end - I_avg * R
 
@@ -56,6 +56,7 @@ class Step:
         return t_end, I_avg, soc0 + I_avg * t_end / Q_nom
 
     def _obtain_IaveCV(self, soc0, R, Q_nom, OCV, I_cut):
+
         soc_est = 1. if self.I > 0 else 0.
         b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
 
@@ -69,7 +70,7 @@ class CCStep(Step):
     def __init__(self, I, V_end):
         super().__init__(I, V_end, Cutoff_I=None)
 
-    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.1):
+    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
 
         self.soc0 = soc0
         t_end, I_avg, soc = self._obtain_IaveCC(soc0, R, Q_nom, OCV, dt)
@@ -83,7 +84,8 @@ class CCCVStep(Step):
     def __init__(self, I, V_end, Cutoff_I):
         super().__init__(I, V_end, Cutoff_I=Cutoff_I)
 
-    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.1):
+    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
+
         self.soc0 = soc0
         t_end_cc, I_avg_cc, soc_cc = self._obtain_IaveCC(soc0, R, Q_nom, OCV, dt)
         t_end_cv, I_avg_cv, soc_cv = self._obtain_IaveCV(soc_cc, R, Q_nom, OCV, self.I_cut)
@@ -127,12 +129,13 @@ class Cycler:
         return self.steps[idx](t_in)
 
     def call_warro(self, domain):
-        num = np.asarray([self.steps[idx].I_avg * self.times[idx + 1] for idx, _ in enumerate(self.times[1:])])
+        dif_t = np.diff(self.times)
+        num = np.asarray([self.steps[idx].I_avg * dif_t[idx] for idx, _ in enumerate(self.times[1:])])
         if domain == "p":
             num[num > 0] = 0
         else:
             num[num < 0] = 0
-        den = np.sum(self.times)
+        den = self.times[-1]
 
         return np.sum(num) / den
 
@@ -146,19 +149,19 @@ class Cycler:
 if __name__ == "__main__":
     # Dummy OCV function
     def OCV_fn(soc):
-        return 3.0 + 0.8 * soc  # simple linear OCV for demonstration
+        return 2.5 + 1.7 * soc  # simple linear OCV for demonstration
 
     steps = [
-        CCStep(I=0.5, V_end=3.5),  # Step 0
-        CCCVStep(I=1.5, V_end=3.8, Cutoff_I=0.2),  # Step 1
-        CCStep(I=-1.5, V_end=3.)
+        CCStep(I=1.5, V_end=3.5),
+        CCCVStep(I=3, V_end=4.2, Cutoff_I=0.2),
+        CCStep(I=-5, V_end=3.)
     ]
 
     cycl = Cycler(
         steps=steps,
         SOC0=0.1,
-        R=0.05,
-        Q=3.0,
+        R=0.049,
+        Q=5.15,
         OCV_fn=OCV_fn
     )
 
@@ -181,3 +184,28 @@ if __name__ == "__main__":
     plt.xlabel("Time (h)")
     plt.ylabel("SOC")
     plt.show()
+
+    print(cycl.total_time)
+
+    cycl.update_cycle(R=cycl.R, Q=4.78579286553214, OCV_fn=cycl.OCV)
+
+    I = []
+    soc = []
+
+    for t_ in t:
+        I_avg, soc_ = cycl(t_)
+        I.append(I_avg)
+        soc.append(soc_)
+
+    fig, ax = plt.subplots()
+    ax.plot(t, I)
+    ax.set_xlabel("Time (h)")
+    ax.set_ylabel("Current (A)")
+    plt.show()
+
+    plt.plot(t, soc)
+    plt.xlabel("Time (h)")
+    plt.ylabel("SOC")
+    plt.show()
+
+    print(cycl.total_time)
