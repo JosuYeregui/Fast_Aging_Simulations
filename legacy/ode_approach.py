@@ -169,7 +169,7 @@ def scipy_rk23_integrate(y0_vec, sol_0, sim,
 # sol_baseline.cycles[-1].steps[-1].y_slices
 if __name__ == "__main__":
 
-    tot_cycles = 1000 # Total cycles to simulate
+    tot_cycles = 100 # Total cycles to simulate
     n_cycles = 25 # each how many cycles to extrapolate
 
     experiment_baseline = pybamm.Experiment(

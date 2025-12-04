@@ -8,9 +8,9 @@ def get_dif(y, t, cycler, input_vars):
     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
 
-    deps_dt_n = stressLAM_deps_dt_stress(t, y[1], cycler, input_vars, "n")
+    deps_dt_n = stressLAM_deps_dt_stress_azkarro(t, y[1], cycler, input_vars, "n")
 
-    deps_dt_p = stressLAM_deps_dt_stress(t, y[2], cycler, input_vars, "p")
+    deps_dt_p = stressLAM_deps_dt_stress_azkarro(t, y[2], cycler, input_vars, "p")
 
     # t_array = np.linspace(t, t + cycler.total_time*3600., 100)
     # deps_dt_n = []
@@ -125,6 +125,44 @@ def stressLAM_deps_dt_stress(t, eps, cycler, input_vars, domain):
             Beta = input_vars["Beta_"+domain]
 
             deps_dt.append(-Beta * np.abs(stress_h / stress_critial) ** m)
+
+    return np.sum(deps_dt * t_steps) / np.sum(t_steps)
+
+def stressLAM_deps_dt_stress_azkarro(t, eps, cycler, input_vars, domain):
+    # I, _ = cycler(t/3600.)
+    I_all = np.asarray([s.I_avg for s in cycler.steps])
+    if domain == "p":
+        I_all[I_all > 0] = 0
+    else:
+        I_all[I_all < 0] = 0
+    sign = np.sign(np.mean(I_all))
+    I_all = np.abs(I_all)
+    m = input_vars["m_" + domain]
+    t_steps = np.diff(cycler.times)
+    num = [I ** m  * t_steps[idx] for idx, I in enumerate(I_all)]
+    I_avg = sign * (np.sum(num) / cycler.times[-1]) ** (1/m)
+
+    deps_dt = []
+
+    cs_cave = input_vars["cs_cave_"+domain](I_avg, eps, domain)
+    Omega = input_vars["Omega_"+domain]
+    E = input_vars["E_"+domain]
+    nu = input_vars["nu_"+domain]
+    stress_geometric_factor = input_vars["omega_fact_"+domain]
+
+    stress_t = Omega * E * cs_cave / (1 - nu) / stress_geometric_factor
+    stress_r = 0.
+
+    stress_h = (stress_r + 2 * stress_t) / 3
+
+    if stress_h <= 0:
+        deps_dt.append(0.)
+    else:
+
+        stress_critial = input_vars["stress_critical_"+domain]
+        Beta = input_vars["Beta_"+domain]
+
+        deps_dt.append(-Beta * np.abs(stress_h / stress_critial) ** m)
 
     return np.sum(deps_dt * t_steps) / np.sum(t_steps)
 

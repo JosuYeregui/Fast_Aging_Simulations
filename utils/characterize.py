@@ -22,8 +22,11 @@ def get_Q(param):
 
     return eps_n * L * cs_max * F * A * (x_100 - x_0) / 3600
 
-def OCV_func_param(soc, param):
-    x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
+def OCV_func_param(soc, param, stoich):
+    x_0 = stoich["x_0"]
+    x_100 = stoich["x_100"]
+    y_0 = stoich["y_0"]
+    y_100 = stoich["y_100"]
 
     sol_p = soc * (y_100 - y_0) + y_0
     OCP_p = param["Positive electrode OCP [V]"](sol_p)
@@ -33,8 +36,8 @@ def OCV_func_param(soc, param):
 
     return OCP_p - OCP_n
 
-def get_OVC_func(param):
-    return lambda soc: OCV_func_param(soc, param)
+def get_OVC_func(param, stoich):
+    return lambda soc: OCV_func_param(soc, param, stoich)
 
 def get_Rint(model, param):
     experiment = pybamm.Experiment(["Charge at 1C until 4.2V", "Discharge at 1C until 2.5V"])

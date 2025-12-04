@@ -128,27 +128,9 @@ class Cycler:
 
         return self.steps[idx](t_in)
 
-    def call_warro(self, domain):
-        dif_t = np.diff(self.times)
-        num = np.asarray([self.steps[idx].I_avg * dif_t[idx] for idx, _ in enumerate(self.times[1:])])
-        if domain == "p":
-            num[num > 0] = 0
-        else:
-            num[num < 0] = 0
-        den = self.times[-1]
-
-        return np.sum(num) / den
-
-    def call_warro2(self, domain):
-        num = np.asarray([s.I_avg for s in self.steps])
-        if domain == "p":
-            val = np.min(num)
-        else:
-            val = np.max(num)
-
-        return val
-
     def update_cycle(self, R, Q, OCV_fn):
+        # self.times = [t * Q / self.Q for t in self.times]
+        # self.total_time *= Q / self.Q
         self.R = R
         self.Q = Q
         self.OCV = OCV_fn

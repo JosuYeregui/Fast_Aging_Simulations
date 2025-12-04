@@ -75,9 +75,9 @@ if __name__ == "__main__":
     experiment_baseline = pybamm.Experiment(
         [(
             "Charge at 1.5 A until 3.5 V",
-            "Charge at 1 A until 4.2 V",
+            "Charge at 3 A until 4.2 V",
             "Hold at 4.2 V until 0.2 A",
-            "Discharge at 1 A until 3 V",)
+            "Discharge at 5 A until 3 V",)
         ] * tot_cycles
     )
 
@@ -109,12 +109,14 @@ if __name__ == "__main__":
 
     Q = get_Q(param)
     R = get_Rint(model, param)
-    OCV_fn = get_OVC_func(param)
+    x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
+    stoich = {"x_0": x_0, "x_100": x_100, "y_0": y_0, "y_100": y_100}
+    OCV_fn = get_OVC_func(param, stoich)
 
     steps = [
         CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2),
-        CCStep(I=-1, V_end=3.)
+        CCCVStep(I=3, V_end=4.2, Cutoff_I=0.2),
+        CCStep(I=-5, V_end=3.)
     ]
     from copy import deepcopy as copy
     cycl = Cycler(

@@ -5,7 +5,7 @@ from copy import deepcopy
 from utils.degradation_models import get_dif
 
 
-def updated_model_Q(y, input_vars, L0, p):
+def updated_model_Q_old(y, input_vars, L0, p):
 
     Qn = get_Qn(p, y[1])
     F = 96485.33
@@ -20,6 +20,19 @@ def updated_model_Q(y, input_vars, L0, p):
     p["Positive electrode active material volume fraction"] = y[2]
 
     Q = get_Q(p)
+
+    return Q, LLI
+
+def updated_model_Q(y, Q, eps_0, input_vars, L0, p):
+
+    Qn = get_Qn(p, y[1])
+    F = 96485.33
+    A = p["Electrode height [m]"] * p["Electrode width [m]"]
+    a_s = y[1] * 3 / input_vars["Rpart_n"]
+    L = p["Negative electrode thickness [m]"]
+    LLI = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
+
+    Q = Q * y[1] / eps_0 - LLI / Qn
 
     return Q, LLI
 
@@ -58,7 +71,9 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
     history = [(0.0, y0_vec, cycler.times, 0, get_Q(param))]
 
     L0 = y0_vec[0]
+    eps_0 = y0_vec[1]
     R0 = cycler.R
+    Q = cycler.Q
 
     while solver.status == "running":
         solver.step()
@@ -66,7 +81,8 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
         t = solver.t
         y = solver.y.copy()          # full cycle solution used at this step
         try:
-            Q, LLI = updated_model_Q(y, input_vars, L0, deepcopy(param))
+            Q, LLI = updated_model_Q_old(y, input_vars, L0, deepcopy(param))
+            # Q, LLI = updated_model_Q(y, Q, eps_0, input_vars, L0, deepcopy(param))
             R = updated_model_R(y, input_vars, L0, R0)
             cycler.update_cycle(R=R, Q=Q, OCV_fn=cycler.OCV)
 
