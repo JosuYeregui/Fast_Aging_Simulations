@@ -8,9 +8,9 @@ def get_dif(y, t, cycler, input_vars):
     L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
 
-    deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
+    deps_dt_n = stressLAM_deps_dt_stress(t, y[1], cycler, input_vars, "n")
 
-    deps_dt_p = stressLAM_deps_dt(t, y[2], cycler, input_vars, "p")
+    deps_dt_p = stressLAM_deps_dt_stress(t, y[2], cycler, input_vars, "p")
 
     # t_array = np.linspace(t, t + cycler.total_time*3600., 100)
     # deps_dt_n = []
@@ -34,8 +34,11 @@ def get_dif(y, t, cycler, input_vars):
 #     return L - L0
 
 def cast_params_for_LAM(param, input_vars):
+    A = param["Electrode height [m]"] * param["Electrode width [m]"]
+    F = 96485.33212
 
-    names = {"Negative": "n", "Positive": "p"}
+    names = {"Positive": "p", "Negative": "n"}
+    constants = {"p": {}, "n": {}}
     for k, domain in names.items():
         input_vars["Omega_"+domain] = param[k + " electrode partial molar volume [m3.mol-1]"]
         input_vars["omega_fact_" + domain] = 3
@@ -48,27 +51,28 @@ def cast_params_for_LAM(param, input_vars):
         D = param[k + " electrode diffusivity [m2.s-1]"]
         R = param[k + " particle radius [m]"]
         L = param[k + " electrode thickness [m]"]
-        eps_warro = param[k + " electrode active material volume fraction"]
-        A = param["Electrode height [m]"] * param["Electrode width [m]"]
-        F = 96485.33212
+
+        constants[domain]["D"] = D
+        constants[domain]["R"] = R
+        constants[domain]["L"] = L
+
+        input_vars["Rpart_"+domain] = R
 
         def cs_cave(I, eps, domain):
-            as_particle = eps * 3 / R
+            as_particle = eps * 3 / constants[domain]["R"]
             I = -I
             if domain == "n":
-                j = I / (F * as_particle * L * A)
+                j = I / (F * as_particle * constants[domain]["L"] * A)
             else:
-                j = -I / (F * as_particle * L * A)
-            return -j / 5 * R / D
+                j = -I / (F * as_particle * constants[domain]["L"] * A)
+            return -j / 5 * constants[domain]["R"] / constants[domain]["D"]
 
         input_vars["cs_cave_"+domain] = cs_cave
-    input_vars["Beta_n"] /=100.
-    input_vars["Beta_p"] /=1000.
 
     return input_vars
 
 def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
-    #I, _ = cycler(t/3600.)
+    # I, _ = cycler(t/3600.)
     I = cycler.call_warro(domain)
 
     cs_cave = input_vars["cs_cave_"+domain](I, eps, domain)
@@ -92,6 +96,37 @@ def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
     deps_dt = -Beta * np.abs(stress_h / stress_critial) ** m
 
     return deps_dt
+
+def stressLAM_deps_dt_stress(t, eps, cycler, input_vars, domain):
+    # I, _ = cycler(t/3600.)
+    I = [s.I_avg for s in cycler.steps]
+    t_steps = np.diff(cycler.times)
+
+    deps_dt = []
+    for I_step in I:
+
+        cs_cave = input_vars["cs_cave_"+domain](I_step, eps, domain)
+        Omega = input_vars["Omega_"+domain]
+        E = input_vars["E_"+domain]
+        nu = input_vars["nu_"+domain]
+        stress_geometric_factor = input_vars["omega_fact_"+domain]
+
+        stress_t = Omega * E * cs_cave / (1 - nu) / stress_geometric_factor
+        stress_r = 0.
+
+        stress_h = (stress_r + 2 * stress_t) / 3
+
+        if stress_h <= 0:
+            deps_dt.append(0.)
+        else:
+
+            stress_critial = input_vars["stress_critical_"+domain]
+            m = input_vars["m_"+domain]
+            Beta = input_vars["Beta_"+domain]
+
+            deps_dt.append(-Beta * np.abs(stress_h / stress_critial) ** m)
+
+    return np.sum(deps_dt * t_steps) / np.sum(t_steps)
 
 def cast_params_for_SEI(param, input_vars):
 
@@ -127,6 +162,8 @@ def cast_params_for_SEI(param, input_vars):
     input_vars["A_ec"] = A_ec
     input_vars["D_ec"] = D_ec
     input_vars["rho_SEI"] = rho_SEI
+    input_vars["V_SEI"] = V_sei
+    input_vars["z_SEI"] = z
 
     return input_vars
 

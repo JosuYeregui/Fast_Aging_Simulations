@@ -139,6 +139,15 @@ class Cycler:
 
         return np.sum(num) / den
 
+    def call_warro2(self, domain):
+        num = np.asarray([s.I_avg for s in self.steps])
+        if domain == "p":
+            val = np.min(num)
+        else:
+            val = np.max(num)
+
+        return val
+
     def update_cycle(self, R, Q, OCV_fn):
         self.R = R
         self.Q = Q

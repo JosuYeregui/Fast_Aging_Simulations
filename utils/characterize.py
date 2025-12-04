@@ -1,6 +1,14 @@
 import pybamm
 import numpy as np
 
+def get_Qn(param, eps_n):
+
+    L = param["Negative electrode thickness [m]"]
+    A = param["Electrode height [m]"] * param["Electrode width [m]"]
+    cs_max = param["Maximum concentration in negative electrode [mol.m-3]"]
+    F = 96485.33
+
+    return eps_n * L * cs_max * F * A / 3600
 
 def get_Q(param):
 

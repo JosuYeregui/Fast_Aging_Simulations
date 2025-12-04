@@ -1,24 +1,35 @@
 from scipy.integrate import RK23
-from utils.characterize import get_Q, get_OVC_func
+from utils.characterize import get_Q, get_Qn, get_OVC_func
 from copy import deepcopy
 
 from utils.degradation_models import get_dif
 
 
-def updated_model_Q(y, p):
+def updated_model_Q(y, input_vars, L0, p):
 
+    Qn = get_Qn(p, y[1])
+    F = 96485.33
+    A = p["Electrode height [m]"] * p["Electrode width [m]"]
+    a_s = y[1] * 3 / input_vars["Rpart_n"]
+    L = p["Negative electrode thickness [m]"]
+    LLI = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
+
+    p["Initial concentration in negative electrode [mol.m-3]"] -= LLI / Qn * p["Maximum concentration in negative electrode [mol.m-3]"]
     p["Initial SEI thickness [m]"] = y[0]
     p["Negative electrode active material volume fraction"] = y[1]
     p["Positive electrode active material volume fraction"] = y[2]
 
     Q = get_Q(p)
 
-    return Q
+    return Q, LLI
 
 def updated_model_R(y, input_vars, L0, R0):
 
-    R_dif = (y[0] - L0) * input_vars["rho_SEI"]
-    R = R0 #+ R_dif
+    a_s =  y[1] * 3 / input_vars["Rpart_n"]
+    F = 96485.33
+
+    R_dif = (y[0] - L0) * input_vars["rho_SEI"] / a_s * F
+    R = R0 + R_dif
 
     return R
 
@@ -44,7 +55,7 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
     solver = RK23(rhs, t0=0.0, y0=y0_vec, t_bound=t_final,
                   max_step=max_step, rtol=rtol, atol=atol)
 
-    history = [(0.0, y0_vec, cycler.times)]
+    history = [(0.0, y0_vec, cycler.times, 0, get_Q(param))]
 
     L0 = y0_vec[0]
     R0 = cycler.R
@@ -55,11 +66,11 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
         t = solver.t
         y = solver.y.copy()          # full cycle solution used at this step
         try:
-            Q = updated_model_Q(y, deepcopy(param))
+            Q, LLI = updated_model_Q(y, input_vars, L0, deepcopy(param))
             R = updated_model_R(y, input_vars, L0, R0)
             cycler.update_cycle(R=R, Q=Q, OCV_fn=cycler.OCV)
 
-            history.append((t, y, cycler.times))
+            history.append((t, y, cycler.times, LLI, Q))
         except:
             print("Q_min reached")
             break

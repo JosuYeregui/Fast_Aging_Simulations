@@ -147,8 +147,8 @@ j_stress_LAM_p = -Beta_p * ((stress_h_p[0:len(t)] - stress_h_min) / stress_criti
 
 eps_s_n_anal = eps_s_n[1] + np.cumsum(j_stress_LAM_n)
 eps_s_p_anal = eps_s_p[1] + np.cumsum(j_stress_LAM_p)
-SOH_LAM_n_anal = eps_s_n_anal / eps_s_n_anal[1];
-SOH_LAM_p_anal = eps_s_p_anal / eps_s_p_anal[1];
+SOH_LAM_n_anal = eps_s_n_anal / eps_s_n_anal[1]
+SOH_LAM_p_anal = eps_s_p_anal / eps_s_p_anal[1]
 
 # --------------------------------------------------------------------------------
 # 6. Plot results
