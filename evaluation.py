@@ -58,7 +58,7 @@ def extract_y_from_solution(sol):
 if __name__ == "__main__":
 
     tot_cycles = 100
-    initial_soc = 0.5
+    initial_soc = 0.1
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     steps = [
         CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=3, V_end=3.6, Cutoff_I=0.2),
+        CCCVStep(I=3, V_end=3.6, Cutoff_I=0.2, Vlim=4.2),
         CCStep(I=-5, V_end=3.)
     ]
     from copy import deepcopy as copy

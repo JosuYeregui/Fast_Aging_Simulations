@@ -5,12 +5,13 @@ from matplotlib import pyplot as plt
 
 
 class Step:
-    def __init__(self, I, V_end, Cutoff_I=None):
+    def __init__(self, I, V_end, Cutoff_I=None, Vlim=None):
         self.I = I
         self.V_end = V_end
         self.soc0 = None
         self.socEND = None
         self.I_cut = Cutoff_I
+        self.Vlim = Vlim
         self.t_duration = None
         self.I_avg = None
 
@@ -58,7 +59,10 @@ class Step:
     def _obtain_IaveCV(self, soc0, R, Q_nom, OCV, I_cut):
 
         soc_est = 1. if self.I > 0 else 0.
-        b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
+        #b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
+        b = (self.Vlim - OCV(soc0)) / (soc_est - soc0)
+        if b <= 0:
+            return 0, 0, soc0
 
         t_end = -np.log(I_cut / self.I) * (R * Q_nom) / b
 
@@ -81,8 +85,8 @@ class CCStep(Step):
 
 
 class CCCVStep(Step):
-    def __init__(self, I, V_end, Cutoff_I):
-        super().__init__(I, V_end, Cutoff_I=Cutoff_I)
+    def __init__(self, I, V_end, Cutoff_I, Vlim):
+        super().__init__(I, V_end, Cutoff_I=Cutoff_I, Vlim=Vlim)
 
     def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
 
