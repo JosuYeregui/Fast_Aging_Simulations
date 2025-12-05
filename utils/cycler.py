@@ -94,11 +94,25 @@ class CCCVStep(Step):
         self.t_duration = t_end_cc + t_end_cv
         self.socEND = soc_cv
 
+class DynamicProfile(Step):
+    def __init__(self, I, V_end):
+        super().__init__(I, V_end, Cutoff_I=None)
+
+    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
+
+        self.soc0 = soc0
+        t_end, I_avg, soc = self._obtain_IaveCC(soc0, R, Q_nom, OCV, dt)
+
+        self.I_avg = I_avg
+        self.t_duration = t_end
+        self.socEND = soc
+
 
 class Cycler:
     def __init__(self, steps, SOC0, R, Q, OCV_fn):
         self.steps = steps
         self.soc0 = SOC0
+        self.soc = []
         self.R = R
         self.Q = Q
         self.OCV = OCV_fn
@@ -109,12 +123,14 @@ class Cycler:
     def _build(self):
 
         soc = self.soc0
+        self.soc = [soc]
         total_time = 0.0
         times = [0.]
         for step in self.steps:
             step.simulate_step(soc, self.R, self.Q, self.OCV)
 
             soc = step.socEND
+            self.soc.append(soc)
             total_time += step.t_duration
             times.append(total_time)
 
@@ -136,6 +152,15 @@ class Cycler:
         self.OCV = OCV_fn
 
         self._build()
+
+    def get_soc_ave(self):
+
+        soc_ave = np.zeros(len(self.soc) - 1)
+        t_steps = np.diff(self.times)
+        for i in range(len(self.soc)-1):
+            soc_ave[i] = (self.soc[i] + self.soc[i+1])/2 * t_steps[i]
+
+        return np.sum(soc_ave) / self.total_time
 
 if __name__ == "__main__":
     # Dummy OCV function
