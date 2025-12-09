@@ -1,12 +1,12 @@
 from scipy.integrate import RK23
 from utils.characterize import get_Q, get_Qn, get_OVC_func
 from copy import deepcopy
+import time
 
 from utils.degradation_models import get_dif
 
 
 def updated_model_Q(y, input_vars, cycler, L0, p):
-
     soc_ave = cycler.get_soc_ave()
     p = p.set_initial_stoichiometries(soc_ave)
 
@@ -68,6 +68,7 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
     R0 = cycler.R
     Q = cycler.Q
     LLI = 0
+    #param_copy = deepcopy(param)
 
     while solver.status == "running":
         solver.step()

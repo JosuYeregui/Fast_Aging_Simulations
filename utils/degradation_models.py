@@ -68,6 +68,12 @@ def cast_params_for_LAM(param, input_vars):
             return -j / 5 * constants[domain]["R"] / constants[domain]["D"]
 
         input_vars["cs_cave_"+domain] = cs_cave
+        # input_vars["L_"+domain] = L
+        # input_vars["A_"+domain] = A
+        # input_vars["csmax_"+domain] = param[k + " electrode maximum concentration [mol.m-3]"]
+        # input_vars["cini_"+domain] = param["Initial concentration in " + k.lower() + " electrode [mol.m-3]"]
+        # input_vars["cini_" + domain + "_0"] = param["Initial concentration in " + k.lower() + " electrode [mol.m-3]"]
+        # input_vars["U_"+domain] = param[k + " electrode OCP [V]"]
 
     return input_vars
 

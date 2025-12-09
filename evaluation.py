@@ -57,7 +57,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 100
+    tot_cycles = 1000
     initial_soc = 0.1
 
     param_chen = pybamm.ParameterValues("Chen2020")
@@ -76,26 +76,27 @@ if __name__ == "__main__":
 
     cycle = np.loadtxt("./Dynamic_Profiles/WLTC.txt", skiprows=1)
     cycle[:, 0] -= 1
+    cycle[:, 1] *= -1
     # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
 
-    drive_step = pybamm.step.current(cycle, termination="<2.5V", duration=1800)
-
-    # experiment_baseline = pybamm.Experiment(
-    #     [(
-    #         "Charge at 1.5 A until 3.5 V",
-    #         "Charge at 3 A until 3.6 V",
-    #         "Hold at 3.6 V until 0.2 A",
-    #         "Discharge at 5 A until 3 V",)
-    #     ] * tot_cycles
-    # )
+    drive_step = pybamm.step.current(cycle, termination="<2.5V", duration=1800000)
 
     experiment_baseline = pybamm.Experiment(
-            [(
-                "Charge at 1.5 A until 3.7 V",
-                "Hold at 3.7 V until 0.2 A",
-                drive_step,)
-            ] * tot_cycles
-        )
+        [(
+            "Charge at 1.5 A until 3.5 V",
+            "Charge at 1 A until 3.6 V",
+            "Hold at 3.6 V until 0.2 A",
+            "Discharge at 1 A until 3 V",)
+        ] * tot_cycles
+    )
+
+    # experiment_baseline = pybamm.Experiment(
+    #         [(
+    #             "Charge at 1.5 A until 4 V",
+    #             "Hold at 4 V until 0.2 A",
+    #             drive_step,)
+    #         ] * tot_cycles
+    #     )
 
     model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
 
@@ -129,15 +130,15 @@ if __name__ == "__main__":
     stoich = {"x_0": x_0, "x_100": x_100, "y_0": y_0, "y_100": y_100}
     OCV_fn = get_OVC_func(param, stoich)
 
-    # steps = [
-    #     CCStep(I=1.5, V_end=3.5),
-    #     CCCVStep(I=3, V_end=3.6, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-    #     CCStep(I=-5, V_end=3.)
-    # ]
     steps = [
-        CCCVStep(I=1.5, V_end=3.7, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
+        CCStep(I=1.5, V_end=3.5),
+        CCCVStep(I=1, V_end=3.6, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+        CCStep(I=-1, V_end=3.)
     ]
+    # steps = [
+    #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
+    # ]
     from copy import deepcopy as copy
     cycl = Cycler(
         steps=steps,

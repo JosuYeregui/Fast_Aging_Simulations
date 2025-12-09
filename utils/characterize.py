@@ -1,5 +1,6 @@
 import pybamm
 import numpy as np
+import time
 
 def get_Qn(param, eps_n):
 
@@ -11,7 +12,6 @@ def get_Qn(param, eps_n):
     return eps_n * L * cs_max * F * A / 3600
 
 def get_Q(param):
-
     # x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
     x_0, x_100, y_100, y_0 = stoichiometric_window(param)
 
