@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 from main import scipy_rk23_integrate
 from utils.degradation_models import cast_params_for_SEI, cast_params_for_LAM
-from utils.cycler import CCStep, CCCVStep, Cycler
+from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile
 from utils.characterize import *
 from utils.pybamm_submodels import *
 
@@ -70,17 +70,32 @@ if __name__ == "__main__":
     param["EC diffusivity [m2.s-1]"] /= 10
     param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
+    param["Upper voltage cut-off [V]"] = 4.5
 
     param = update_LAM_params(param)
 
+    cycle = np.loadtxt("./Dynamic_Profiles/WLTC.txt", skiprows=1)
+    cycle[:, 0] -= 1
+    # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
+
+    drive_step = pybamm.step.current(cycle, termination="<2.5V", duration=1800)
+
+    # experiment_baseline = pybamm.Experiment(
+    #     [(
+    #         "Charge at 1.5 A until 3.5 V",
+    #         "Charge at 3 A until 3.6 V",
+    #         "Hold at 3.6 V until 0.2 A",
+    #         "Discharge at 5 A until 3 V",)
+    #     ] * tot_cycles
+    # )
+
     experiment_baseline = pybamm.Experiment(
-        [(
-            "Charge at 1.5 A until 3.5 V",
-            "Charge at 3 A until 3.6 V",
-            "Hold at 3.6 V until 0.2 A",
-            "Discharge at 5 A until 3 V",)
-        ] * tot_cycles
-    )
+            [(
+                "Charge at 1.5 A until 3.7 V",
+                "Hold at 3.7 V until 0.2 A",
+                drive_step,)
+            ] * tot_cycles
+        )
 
     model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
 
@@ -114,10 +129,14 @@ if __name__ == "__main__":
     stoich = {"x_0": x_0, "x_100": x_100, "y_0": y_0, "y_100": y_100}
     OCV_fn = get_OVC_func(param, stoich)
 
+    # steps = [
+    #     CCStep(I=1.5, V_end=3.5),
+    #     CCCVStep(I=3, V_end=3.6, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    #     CCStep(I=-5, V_end=3.)
+    # ]
     steps = [
-        CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=3, V_end=3.6, Cutoff_I=0.2, Vlim=4.2),
-        CCStep(I=-5, V_end=3.)
+        CCCVStep(I=1.5, V_end=3.7, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
     ]
     from copy import deepcopy as copy
     cycl = Cycler(

@@ -67,6 +67,7 @@ def scipy_rk23_integrate(y0_vec, input_vars, param,
     eps_0 = y0_vec[1]
     R0 = cycler.R
     Q = cycler.Q
+    LLI = 0
 
     while solver.status == "running":
         solver.step()

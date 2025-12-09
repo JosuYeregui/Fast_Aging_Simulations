@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import bisect
 
 from matplotlib import pyplot as plt
@@ -59,8 +60,9 @@ class Step:
     def _obtain_IaveCV(self, soc0, R, Q_nom, OCV, I_cut):
 
         soc_est = 1. if self.I > 0 else 0.
+        Vlim = self.Vlim[1] if self.I > 0 else self.Vlim[0]
         #b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
-        b = (self.Vlim - OCV(soc0)) / (soc_est - soc0)
+        b = (Vlim - OCV(soc0)) / (soc_est - soc0)
         if b <= 0:
             return 0, 0, soc0
 
@@ -98,18 +100,74 @@ class CCCVStep(Step):
         self.t_duration = t_end_cc + t_end_cv
         self.socEND = soc_cv
 
+import time
 class DynamicProfile(Step):
-    def __init__(self, I, V_end):
-        super().__init__(I, V_end, Cutoff_I=None)
+    def __init__(self, V_lim, cycle, dir=None, I_vec=None, t_vec=None):
+        self.cycle = cycle
 
-    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
+        if dir is not None:
+            I, t = self._load_profile(dir)
+            I = I
+            t = t
+        elif I_vec is not None and t_vec is not None:
+            I = I_vec
+            t = t_vec
+        else:
+            raise Exception("No valid input")
+
+        self.t_cycle= t
+
+        super().__init__(I, None, Cutoff_I=None, Vlim=V_lim)
+
+    def simulate_step(self, soc0, R, Q_nom, OCV):
 
         self.soc0 = soc0
-        t_end, I_avg, soc = self._obtain_IaveCC(soc0, R, Q_nom, OCV, dt)
 
-        self.I_avg = I_avg
-        self.t_duration = t_end
-        self.socEND = soc
+        self.I_avg, self.t_duration, self.socEND = self._obtain_IaveDynamic(soc0, R, Q_nom, OCV)
+
+    def _load_profile(self, filename):
+        data = np.loadtxt(filename, skiprows=1)
+        t = data[:, 0] / 3600.
+        I = data[:, 1]
+        return I, t
+
+    def _obtain_IaveDynamic(self, soc0, R, Q_nom, OCV):
+
+        def perform_cycle(soc0, I, t, Q, R, OCV):
+            dt = np.diff(t)
+            soc_minus_ini = soc0 + np.cumsum(I[:-1] * dt / Q)
+            V = OCV(soc_minus_ini) + I[-1] * R
+
+            out_of_bounds = np.where((V < self.Vlim[0]) | (V > self.Vlim[1]))[0]
+
+            if len(out_of_bounds) > 0:
+                idx = out_of_bounds[0]  # first occurrence
+                soc = soc_minus_ini[idx+1]
+                t = t[idx+1]
+                terminal = True
+            else:
+                # If voltage never goes out of limits
+                soc = soc_minus_ini[-1]
+                t = t[-1]
+                terminal = False
+
+            return soc, t, terminal
+
+        terminal = False
+        t_end = 0
+        soc_cycle = soc0
+
+        while not terminal or t_end > 1e6:
+
+            soc_cycle, t, terminal = perform_cycle(soc_cycle, self.I, self.t_cycle, Q_nom, R, OCV)
+            t_end += t
+
+            if not self.cycle:
+                terminal = True
+
+        I_ave = (soc_cycle - soc0) * Q_nom / t_end
+
+        return I_ave, t_end, soc_cycle
 
 
 class Cycler:
@@ -172,9 +230,8 @@ if __name__ == "__main__":
         return 2.5 + 1.7 * soc  # simple linear OCV for demonstration
 
     steps = [
-        CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=3, V_end=4.2, Cutoff_I=0.2),
-        CCStep(I=-5, V_end=3.)
+        CCStep(I=1.5, V_end=4.2),
+        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../Dynamic_Profiles/UDDS.txt")
     ]
 
     cycl = Cycler(
