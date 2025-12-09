@@ -12,7 +12,8 @@ def get_Qn(param, eps_n):
 
 def get_Q(param):
 
-    x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
+    # x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
+    x_0, x_100, y_100, y_0 = stoichiometric_window(param)
 
     eps_n = param["Negative electrode active material volume fraction"]
     L = param["Negative electrode thickness [m]"]
@@ -21,6 +22,86 @@ def get_Q(param):
     F = 96485.33
 
     return eps_n * L * cs_max * F * A * (x_100 - x_0) / 3600
+
+def stoichiometric_window(param):
+    
+    eps_n = param["Negative electrode active material volume fraction"]
+    Qn = get_Qn(param, eps_n)
+    eps_p = param["Positive electrode active material volume fraction"]
+    csmax_p = param["Maximum concentration in positive electrode [mol.m-3]"]
+    csmax_n = param["Maximum concentration in negative electrode [mol.m-3]"]
+    L = param["Positive electrode thickness [m]"]
+    A = param["Electrode height [m]"] * param["Electrode width [m]"]
+    F = 96485.33
+    Qp = eps_p * L * csmax_p * F * A / 3600
+    theta_n = param["Initial concentration in negative electrode [mol.m-3]"] / csmax_n
+    theta_p = param["Initial concentration in positive electrode [mol.m-3]"] / csmax_p
+    OCP_p = param["Positive electrode OCP [V]"]
+    OCP_n = param["Negative electrode OCP [V]"]
+    
+    
+    Q_at_Vmin = find_voltage_limit(2.5, -8, 2, theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
+    Q_at_Vmax = find_voltage_limit(4.2, -2, 8, theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
+    
+    x_0 = theta_n + Q_at_Vmin / Qn
+    x_100 = theta_n + Q_at_Vmax / Qn
+    y_0 = theta_p + Q_at_Vmin / Qp
+    y_100 = theta_p + Q_at_Vmax / Qp
+    
+    
+    return x_0, x_100, y_100, y_0
+
+def bisection_for_voltage(
+    voltage_fn,
+    target_voltage,
+    a,
+    b,
+    tol=1e-4,
+    max_iter=100
+):
+
+    fa = voltage_fn(a) - target_voltage
+    fb = voltage_fn(b) - target_voltage
+
+    if fa * fb > 0:
+        raise ValueError("Voltage does not cross target in the interval.")
+
+    for _ in range(max_iter):
+        mid = 0.5 * (a + b)
+        fmid = voltage_fn(mid) - target_voltage
+
+        if abs(fmid) < tol:
+            return mid
+
+        if fa * fmid < 0:
+            b = mid
+            fb = fmid
+        else:
+            a = mid
+            fa = fmid
+
+    return mid
+
+def cell_voltage_from_Q(Q, x_n0, x_p0, Cn, Cp, Un, Up):
+
+    x_n = x_n0 + Q / Cn
+    x_p = x_p0 - Q / Cp
+
+    return Up(x_p) - Un(x_n)
+
+def find_voltage_limit(
+    target_voltage,
+    Qmin,
+    Qmax,
+    x_n0, x_p0,
+    Cn, Cp,
+    Un, Up
+):
+
+    voltage_fn = lambda Q: cell_voltage_from_Q(Q, x_n0, x_p0, Cn, Cp, Un, Up)
+
+    return bisection_for_voltage(voltage_fn, target_voltage, Qmin, Qmax)
+
 
 def OCV_func_param(soc, param, stoich):
     x_0 = stoich["x_0"]
