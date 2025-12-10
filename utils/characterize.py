@@ -2,42 +2,51 @@ import pybamm
 import numpy as np
 import time
 
-def get_Qn(param, eps_n):
+def get_Qn(input_vars, eps_n):
 
-    L = param["Negative electrode thickness [m]"]
-    A = param["Electrode height [m]"] * param["Electrode width [m]"]
-    cs_max = param["Maximum concentration in negative electrode [mol.m-3]"]
+    L = input_vars["L_n"]
+    A = input_vars["A"]
+    cs_max = input_vars["csmax_n"]
     F = 96485.33
 
     return eps_n * L * cs_max * F * A / 3600
 
-def get_Q(param):
-    # x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
-    x_0, x_100, y_100, y_0 = stoichiometric_window(param)
+def get_Qp(input_vars, eps_p):
 
-    eps_n = param["Negative electrode active material volume fraction"]
-    L = param["Negative electrode thickness [m]"]
-    A = param["Electrode height [m]"] * param["Electrode width [m]"]
-    cs_max = param["Maximum concentration in negative electrode [mol.m-3]"]
+    L = input_vars["L_p"]
+    A = input_vars["A"]
+    cs_max = input_vars["csmax_p"]
+    F = 96485.33
+
+    return eps_p * L * cs_max * F * A / 3600
+
+def get_Q(input_vars, y):
+    # x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
+    x_0 = input_vars["x_0"]
+    x_100 = input_vars["x_100"]
+
+    eps_n = y[1]
+    L = input_vars["L_n"]
+    A = input_vars["A"]
+    cs_max = input_vars["csmax_n"]
     F = 96485.33
 
     return eps_n * L * cs_max * F * A * (x_100 - x_0) / 3600
 
-def stoichiometric_window(param):
+def stoichiometric_window(input_vars, y):
     
-    eps_n = param["Negative electrode active material volume fraction"]
-    Qn = get_Qn(param, eps_n)
-    eps_p = param["Positive electrode active material volume fraction"]
-    csmax_p = param["Maximum concentration in positive electrode [mol.m-3]"]
-    csmax_n = param["Maximum concentration in negative electrode [mol.m-3]"]
-    L = param["Positive electrode thickness [m]"]
-    A = param["Electrode height [m]"] * param["Electrode width [m]"]
-    F = 96485.33
-    Qp = eps_p * L * csmax_p * F * A / 3600
-    theta_n = param["Initial concentration in negative electrode [mol.m-3]"] / csmax_n
-    theta_p = param["Initial concentration in positive electrode [mol.m-3]"] / csmax_p
-    OCP_p = param["Positive electrode OCP [V]"]
-    OCP_n = param["Negative electrode OCP [V]"]
+    eps_n = y[1]
+    Qn = get_Qn(input_vars, eps_n)
+    eps_p = y[2]
+    Qp = get_Qp(input_vars, eps_p)
+
+    csmax_n = input_vars["csmax_n"]
+    theta_n = input_vars["cini_n"] / csmax_n
+    OCP_n = input_vars["U_n"]
+
+    csmax_p = input_vars["csmax_p"]
+    theta_p = input_vars["cini_p"] / csmax_p
+    OCP_p = input_vars["U_p"]
     
     
     Q_at_Vmin = find_voltage_limit(2.5, -8, 2, theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
@@ -45,8 +54,8 @@ def stoichiometric_window(param):
     
     x_0 = theta_n + Q_at_Vmin / Qn
     x_100 = theta_n + Q_at_Vmax / Qn
-    y_0 = theta_p + Q_at_Vmin / Qp
-    y_100 = theta_p + Q_at_Vmax / Qp
+    y_0 = theta_p - Q_at_Vmin / Qp
+    y_100 = theta_p - Q_at_Vmax / Qp
     
     
     return x_0, x_100, y_100, y_0
@@ -103,22 +112,22 @@ def find_voltage_limit(
     return bisection_for_voltage(voltage_fn, target_voltage, Qmin, Qmax)
 
 
-def OCV_func_param(soc, param, stoich):
-    x_0 = stoich["x_0"]
-    x_100 = stoich["x_100"]
-    y_0 = stoich["y_0"]
-    y_100 = stoich["y_100"]
+def OCV_func_param(soc, input_vars):
+    x_0 = input_vars["x_0"]
+    x_100 = input_vars["x_100"]
+    y_0 = input_vars["y_0"]
+    y_100 = input_vars["y_100"]
 
     sol_p = soc * (y_100 - y_0) + y_0
-    OCP_p = param["Positive electrode OCP [V]"](sol_p)
+    OCP_p = input_vars["U_p"](sol_p)
 
     sol_n = soc * (x_100 - x_0) + x_0
-    OCP_n = param["Negative electrode OCP [V]"](sol_n)
+    OCP_n = input_vars["U_n"](sol_n)
 
     return OCP_p - OCP_n
 
-def get_OVC_func(param, stoich):
-    return lambda soc: OCV_func_param(soc, param, stoich)
+def get_OVC_func(input_vars):
+    return lambda soc: OCV_func_param(soc, input_vars)
 
 def get_Rint(model, param):
     experiment = pybamm.Experiment(["Charge at 1C until 4.2V", "Discharge at 1C until 2.5V"])

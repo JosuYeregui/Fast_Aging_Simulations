@@ -84,8 +84,8 @@ if __name__ == "__main__":
     experiment_baseline = pybamm.Experiment(
         [(
             "Charge at 1.5 A until 3.5 V",
-            "Charge at 1 A until 3.6 V",
-            "Hold at 3.6 V until 0.2 A",
+            "Charge at 1 A until 4.2 V",
+            "Hold at 4.2 V until 0.2 A",
             "Discharge at 1 A until 3 V",)
         ] * tot_cycles
     )
@@ -124,15 +124,29 @@ if __name__ == "__main__":
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
     Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
 
-    Q = get_Q(param)
-    R = get_Rint(model, param)
+    L0 = float(param.get("initial sei thickness", 5e-9))
+    eps_0_n = param["Negative electrode active material volume fraction"]
+    eps_0_p = param["Positive electrode active material volume fraction"]
+
+    y0_vec = [L0, eps_0_n, eps_0_p]
+
+    input_vars = {}
+    input_vars = cast_params_for_SEI(param, input_vars)
+    input_vars = cast_params_for_LAM(param, input_vars)
+
     x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
-    stoich = {"x_0": x_0, "x_100": x_100, "y_0": y_0, "y_100": y_100}
-    OCV_fn = get_OVC_func(param, stoich)
+    input_vars["x_0"] = x_0
+    input_vars["x_100"] = x_100
+    input_vars["y_0"] = y_0
+    input_vars["y_100"] = y_100
+
+    Q = get_Q(input_vars, y0_vec)
+    R = get_Rint(model, param)
+    OCV_fn = get_OVC_func(input_vars)
 
     steps = [
         CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=1, V_end=3.6, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+        CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
         CCStep(I=-1, V_end=3.)
     ]
     # steps = [
@@ -148,23 +162,18 @@ if __name__ == "__main__":
         OCV_fn=OCV_fn
     )
 
-    L0 = float(param.get("initial sei thickness", 5e-9))
-    eps_0_n = param["Negative electrode active material volume fraction"]
-    eps_0_p = param["Positive electrode active material volume fraction"]
-
-    y0_vec = [L0, eps_0_n, eps_0_p]
-
-    input_vars = {}
-    input_vars = cast_params_for_SEI(param, input_vars)
-    input_vars = cast_params_for_LAM(param, input_vars)
+    soc_ave = cycl.get_soc_ave()
+    sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
+    input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
+    sol_p = soc_ave * (input_vars["y_100"] - input_vars["y_0"]) + input_vars["y_0"]
+    input_vars["cini_p_0"] = sol_p * input_vars["csmax_p"]
 
     start_ode_time = time.time()
     history = scipy_rk23_integrate(
         y0_vec=y0_vec,
         input_vars=input_vars,
-        t_final=float(tot_cycles) * cycl.total_time * 3600.,  # e.g. 1000
+        tot_cycles=tot_cycles,
         cycler=cycl,
-        param=param,
         rtol=[1e-3, 1e-3, 1e-3],
         atol=[1e-9 ,1e-4, 1e-4],
         stop_condition_fn=None,  # optional early-stop
@@ -173,30 +182,33 @@ if __name__ == "__main__":
     ode_time = time.time() - start_ode_time
     print("ODE + integration time: ", ode_time)
 
-    t_ode = [h[0] for h in history]
-    L_ode = [h[1][0] for h in history]
-    eps_n_ode = [h[1][1] for h in history]
-    eps_p_ode = [h[1][2] for h in history]
-    t_final_evol = [h[2] for h in history]
-    LLI = [h[3] for h in history]
-    Q_ode = [h[4] for h in history]
+    #t_ode = [h[0] for h in history]
+    t_ode = [h[1] for h in history]
+    L_ode = [h[2][0] for h in history]
+    eps_n_ode = [h[2][1] for h in history]
+    eps_p_ode = [h[2][2] for h in history]
+    t_final_evol = [h[3] for h in history]
+    LLI = [h[4] for h in history]
+    Q_ode = [h[5] for h in history]
 
     L_bs = []
     LLI_bs = []
     eps_n_bs = []
     eps_p_bs = []
-    t_baseline = []
+    #t_baseline = []
     for s in sol_baseline.cycles:
         y, _ = extract_y0_yend(s)
         L_bs.append(y["L_sei"])
         LLI_bs.append(y["LLI_sei"])
         eps_n_bs.append(y["eps_n"])
         eps_p_bs.append(y["eps_p"])
-        t_baseline.append(s["Time [h]"].entries[0])
+        #t_baseline.append(s["Time [h]"].entries[0])
+
+    t_baseline = np.arange(len(sol_baseline.cycles))
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
-    ax.scatter(np.asarray(t_ode) / 3600., L_ode, label="ODE",
+    ax.scatter(np.asarray(t_ode), L_ode, label="ODE",
                c="red")
     #ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
@@ -207,10 +219,10 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, eps_n_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode) / 3600., eps_n_ode, label="\epsilon_n ODE",
+    ax.scatter(np.asarray(t_ode), eps_n_ode, label="\epsilon_n ODE",
                c="blue")
     ax.plot(t_baseline, eps_p_bs, label="Baseline", color="orange")
-    ax.scatter(np.asarray(t_ode) / 3600., eps_p_ode, label="\epsilon_p ODE",
+    ax.scatter(np.asarray(t_ode), eps_p_ode, label="\epsilon_p ODE",
                c="orange")
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
@@ -220,7 +232,7 @@ if __name__ == "__main__":
     plt.show()
 
     fig, ax = plt.subplots()
-    ax.plot(np.asarray(t_ode) / 3600., t_final_evol)
+    ax.plot(np.asarray(t_ode), t_final_evol)
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
     ax.set_xlabel("t [h]")
@@ -236,7 +248,7 @@ if __name__ == "__main__":
     # Plot LLI_sei
     fig, ax = plt.subplots()
     ax.plot(t_baseline, LLI_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode) / 3600., LLI, label="ODE", color="red")
+    ax.scatter(np.asarray(t_ode), LLI, label="ODE", color="red")
     ax.legend()
     ax.set_xlabel("t [h]")
     plt.show()
@@ -244,7 +256,7 @@ if __name__ == "__main__":
     # Plot Q
     fig, ax = plt.subplots()
     ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode) / 3600., Q_ode, label="ODE", color="red")
+    ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
     ax.legend()
     ax.set_xlabel("t [h]")
     plt.show()

@@ -224,6 +224,11 @@ class Cycler:
 
         return np.sum(soc_ave) / self.total_time
 
+    def get_n_cycles(self, t, t_prev):
+
+        dt = t - t_prev
+        return dt / self.total_time
+
 if __name__ == "__main__":
     # Dummy OCV function
     def OCV_fn(soc):
