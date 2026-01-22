@@ -169,6 +169,64 @@ class DynamicProfile(Step):
 
         return I_ave, t_end, soc_cycle
 
+class PowerProfile(Step):
+    def __init__(self, V_lim, P, t):
+
+        self.t_cycle= t
+
+        super().__init__(P, None, Cutoff_I=None, Vlim=V_lim)
+        self.P = self.I
+
+    def simulate_step(self, soc0, R, Q_nom, OCV):
+
+        self.soc0 = soc0
+
+        self.I_avg, self.t_duration, self.socEND = self._obtain_IavePower(soc0, R, Q_nom, OCV)
+
+    def _obtain_IavePower(self, soc0, R, Q_nom, OCV):
+
+        P = self.P
+        t = self.t_cycle
+        dt = np.diff(t)
+
+        soc = soc0
+        t_end = 0.0
+
+        for k in range(len(dt)):
+
+            Voc = OCV(soc)
+            Pk = P[k]
+
+            # Solve R*I^2 - Voc*I + P = 0
+            disc = Voc**2 - 4 * R * Pk
+
+            if disc < 0:
+                raise ValueError("Requested power exceeds battery capability")
+
+            # Discharge: use smaller root
+            I = (Voc - np.sqrt(disc)) / (2 * R)
+
+            # Terminal voltage
+            V = Voc + I * R
+
+            # Voltage limits
+            if (V < self.Vlim[0]) or (V > self.Vlim[1]):
+                break
+
+            # SOC update
+            soc += I * dt[k] / Q_nom
+            if soc > 1.0:
+                soc = 1.0
+                break
+            elif soc < 0.0:
+                soc = 0.0
+                break
+            t_end += dt[k]
+
+        I_ave = (soc - soc0) * Q_nom / t_end if t_end > 0 else 0.0
+
+        return I_ave, t_end, soc
+
 
 class Cycler:
     def __init__(self, steps, SOC0, R, Q, OCV_fn):
@@ -199,7 +257,19 @@ class Cycler:
         self.total_time = total_time
         self.times = times
 
+    def add_step(self, step):
+
+        soc = self.soc[-1]
+        step.simulate_step(soc, self.R, self.Q, self.OCV)
+
+        self.steps.append(step)
+        self.soc.append(step.socEND)
+        self.total_time += step.t_duration
+        self.times.append(self.total_time)
+
     def __call__(self, t):
+        if self.total_time == 0:
+            return self.steps[0](0.)
         mod_t = t % self.total_time
         idx = bisect.bisect_left(self.times[1:], mod_t)
         t_in = mod_t - self.times[idx]
@@ -217,6 +287,9 @@ class Cycler:
 
     def get_soc_ave(self):
 
+        if self.total_time == 0:
+            return self.soc0
+
         soc_ave = np.zeros(len(self.soc) - 1)
         t_steps = np.diff(self.times)
         for i in range(len(self.soc)-1):
@@ -226,6 +299,9 @@ class Cycler:
 
     def get_n_cycles(self, t, t_prev):
 
+        if self.total_time == 0:
+            return 0.
+
         dt = t - t_prev
         return dt / self.total_time
 
@@ -234,9 +310,12 @@ if __name__ == "__main__":
     def OCV_fn(soc):
         return 2.5 + 1.7 * soc  # simple linear OCV for demonstration
 
+    P = np.random.uniform(low=-20, high=20, size=(1000,))
+    t = np.arange(0, len(P), 1) / 3600
+
     steps = [
-        CCStep(I=1.5, V_end=4.2),
-        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../Dynamic_Profiles/UDDS.txt")
+        CCStep(I=1.5, V_end=3.5),
+        PowerProfile(V_lim=[2.5, 4.2], P=P, t=t)
     ]
 
     cycl = Cycler(

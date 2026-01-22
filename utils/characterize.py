@@ -49,8 +49,10 @@ def stoichiometric_window(input_vars, y):
     OCP_p = input_vars["U_p"]
     
     
-    Q_at_Vmin = find_voltage_limit(2.5, -8, 2, theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
-    Q_at_Vmax = find_voltage_limit(4.2, -2, 8, theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
+    Q_at_Vmin = find_voltage_limit(input_vars["V_min"], -input_vars["Q_nom"] * 2., input_vars["Q_nom"] * 0.5,
+                                   theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
+    Q_at_Vmax = find_voltage_limit(input_vars["V_max"], -input_vars["Q_nom"] * 0.5, input_vars["Q_nom"] * 2.,
+                                   theta_n, theta_p, Qn, Qp, OCP_n, OCP_p)
     
     x_0 = theta_n + Q_at_Vmin / Qn
     x_100 = theta_n + Q_at_Vmax / Qn
@@ -156,6 +158,49 @@ def get_Rint(model, param):
     return np.abs(median_R_int)
 
 
+def updated_model_Q(y, input_vars, cycler, L0):
+    soc_ave = cycler.get_soc_ave()
+    sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
+    input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
+    sol_p = soc_ave * (input_vars["y_100"] - input_vars["y_0"]) + input_vars["y_0"]
+    input_vars["cini_p_0"] = sol_p * input_vars["csmax_p"]
+    #p = p.set_initial_stoichiometries(soc_ave)
+
+    # Get LLI from SEI thickness
+    Qn = get_Qn(input_vars, y[1])
+    F = 96485.33
+    A = input_vars["A"]
+    a_s = y[1] * 3 / input_vars["R_n"]
+    L = input_vars["L_n"]
+    LLI = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
+
+    # Update parameters
+    input_vars["cini_n"] = input_vars["cini_n_0"] - LLI / Qn * input_vars["csmax_n"]
+    input_vars["cini_p"] = input_vars["cini_p_0"]
+
+    x_0, x_100, y_100, y_0 = stoichiometric_window(input_vars, y)
+    input_vars["x_0"] = x_0
+    input_vars["x_100"] = x_100
+    input_vars["y_0"] = y_0
+    input_vars["y_100"] = y_100
+
+    # From parameters, get Q
+    Q = get_Q(input_vars, y)
+
+    return Q, LLI
+
+
+def updated_model_R(y, input_vars, L0, R0):
+
+    a_s =  y[1] * 3 / input_vars["R_n"]
+    F = 96485.33
+
+    R_dif = (y[0] - L0) * input_vars["rho_SEI"] / a_s * F
+    R = R0 + R_dif
+
+    return R
+
+
 if __name__ == "__main__":
     param = pybamm.ParameterValues("Chen2020")
     model = pybamm.lithium_ion.SPMe()
@@ -163,5 +208,3 @@ if __name__ == "__main__":
     print(get_Rint(model, param))
 
     print(pybamm.lithium_ion.get_min_max_stoichiometries(param))
-
-    print(get_Q(param))

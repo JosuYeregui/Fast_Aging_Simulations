@@ -2,7 +2,7 @@ import time
 from matplotlib import pyplot as plt
 
 from main import scipy_rk23_integrate
-from utils.degradation_models import cast_params_for_SEI, cast_params_for_LAM
+from utils.param_to_inputvars import cast_params_for_SEI, cast_params_for_LAM
 from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile
 from utils.characterize import *
 from utils.pybamm_submodels import *
@@ -57,7 +57,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 1000
+    tot_cycles = 100
     initial_soc = 0.1
 
     param_chen = pybamm.ParameterValues("Chen2020")
@@ -70,11 +70,11 @@ if __name__ == "__main__":
     param["EC diffusivity [m2.s-1]"] /= 10
     param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
-    param["Upper voltage cut-off [V]"] = 4.5
+    param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
 
-    cycle = np.loadtxt("./Dynamic_Profiles/WLTC.txt", skiprows=1)
+    cycle = np.loadtxt("../Dynamic_Profiles/WLTC.txt", skiprows=1)
     cycle[:, 0] -= 1
     cycle[:, 1] *= -1
     # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
@@ -183,20 +183,32 @@ if __name__ == "__main__":
     print("ODE + integration time: ", ode_time)
 
     #t_ode = [h[0] for h in history]
-    t_ode = [h[1] for h in history]
-    L_ode = [h[2][0] for h in history]
-    eps_n_ode = [h[2][1] for h in history]
-    eps_p_ode = [h[2][2] for h in history]
-    t_final_evol = [h[3] for h in history]
-    LLI = [h[4] for h in history]
-    Q_ode = [h[5] for h in history]
+    # t_ode = [h[1] for h in history]
+    # L_ode = [h[2][0] for h in history]
+    # eps_n_ode = [h[2][1] for h in history]
+    # eps_p_ode = [h[2][2] for h in history]
+    # t_final_evol = [h[3] for h in history]
+    # LLI = [h[4] for h in history]
+    # Q_ode = [h[5] for h in history]
+
+    t_ode = history["n_cycles"]
+    L_ode = history["y"][:, 0]
+    eps_n_ode = history["y"][:, 1]
+    eps_p_ode = history["y"][:, 2]
+    t_final_evol = history["times"]
+    LLI = history["LLI"]
+    Q_ode = history["Q"]
 
     L_bs = []
     LLI_bs = []
     eps_n_bs = []
     eps_p_bs = []
+    Qlim = Q_bs[0] * 0.3
+    Q_bs = np.asarray(Q_bs)
+    Q_bs = Q_bs[Q_bs >= Qlim]
     #t_baseline = []
-    for s in sol_baseline.cycles:
+    for idx in range(len(Q_bs)):
+        s = sol_baseline.cycles[idx]
         y, _ = extract_y0_yend(s)
         L_bs.append(y["L_sei"])
         LLI_bs.append(y["LLI_sei"])
@@ -204,7 +216,7 @@ if __name__ == "__main__":
         eps_p_bs.append(y["eps_p"])
         #t_baseline.append(s["Time [h]"].entries[0])
 
-    t_baseline = np.arange(len(sol_baseline.cycles))
+    t_baseline = np.arange(len(eps_p_bs))
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
@@ -212,7 +224,7 @@ if __name__ == "__main__":
                c="red")
     #ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
-    ax.set_xlabel("t [h]")
+    ax.set_xlabel("cycles")
     ax.set_ylabel("L SEI [m]")
     plt.legend()
     plt.show()
@@ -226,23 +238,9 @@ if __name__ == "__main__":
                c="orange")
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
-    ax.set_xlabel("t [h]")
+    ax.set_xlabel("cycles")
     ax.set_ylabel("\epsilon")
     plt.legend()
-    plt.show()
-
-    fig, ax = plt.subplots()
-    ax.plot(np.asarray(t_ode), t_final_evol)
-    # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
-    #           c="red")
-    ax.set_xlabel("t [h]")
-    plt.show()
-
-    fig, ax = plt.subplots()
-    ax.plot(np.diff(t_baseline))
-    # ax.scatter(np.asarray(t_ode) / 3600. / 3, np.asarray(t_final_evol)[:, -1], label="ODE",
-    #           c="red")
-    ax.set_xlabel("t [h]")
     plt.show()
 
     # Plot LLI_sei
@@ -250,7 +248,7 @@ if __name__ == "__main__":
     ax.plot(t_baseline, LLI_bs, label="Baseline", color="blue")
     ax.scatter(np.asarray(t_ode), LLI, label="ODE", color="red")
     ax.legend()
-    ax.set_xlabel("t [h]")
+    ax.set_xlabel("cycles")
     plt.show()
 
     # Plot Q
@@ -258,5 +256,5 @@ if __name__ == "__main__":
     ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
     ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
     ax.legend()
-    ax.set_xlabel("t [h]")
+    ax.set_xlabel("cycles")
     plt.show()
