@@ -58,8 +58,8 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 100
-    initial_soc = 0.1
+    tot_cycles = 1
+    initial_soc = 1.
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -90,6 +90,7 @@ if __name__ == "__main__":
             "Discharge at 1 A until 3 V",)
         ] * tot_cycles
     )
+    experiment_baseline = drive_step
 
     # experiment_baseline = pybamm.Experiment(
     #         [(
@@ -119,11 +120,18 @@ if __name__ == "__main__":
 
     start_time = time.time()
     sol_baseline = sim_baseline.solve(initial_soc=initial_soc)
+    # sol_baseline.save("solution")
     end_time = time.time()
     print("Baseline simulation time: ", end_time - start_time)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
-    Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
+    #Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
+    t_bs = sol_baseline["Time [h]"].entries
+    Q_bs = [get_capacity_from_sol(sol_baseline, param, idx, esoh_solver) for idx in range(len(t_bs))]
+    LLI_bs = sol_baseline["Loss of capacity to negative SEI [A.h]"].entries
+    L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
+    eps_n_bs = sol_baseline["X-averaged negative electrode active material volume fraction"].entries
+    eps_p_bs = sol_baseline["X-averaged positive electrode active material volume fraction"].entries
 
 
     input_vars = load_params("input/M50_okane_modified.yaml")
@@ -147,6 +155,9 @@ if __name__ == "__main__":
     #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
     #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
     # ]
+    steps = [
+        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
+    ]
     from copy import deepcopy as copy
     cycl = Cycler(
         steps=steps,
@@ -185,24 +196,25 @@ if __name__ == "__main__":
     LLI = history["LLI"]
     Q_ode = history["Q"]
 
-    L_bs = []
-    LLI_bs = []
-    eps_n_bs = []
-    eps_p_bs = []
-    Qlim = Q_bs[0] * 0.3
-    Q_bs = np.asarray(Q_bs)
-    Q_bs = Q_bs[Q_bs >= Qlim]
-    #t_baseline = []
-    for idx in range(len(Q_bs)):
-        s = sol_baseline.cycles[idx]
-        y, _ = extract_y0_yend(s)
-        L_bs.append(y["L_sei"])
-        LLI_bs.append(y["LLI_sei"])
-        eps_n_bs.append(y["eps_n"])
-        eps_p_bs.append(y["eps_p"])
+    # L_bs = []
+    # LLI_bs = []
+    # eps_n_bs = []
+    # eps_p_bs = []
+    # Qlim = Q_bs[0] * 0.3
+    # Q_bs = np.asarray(Q_bs)
+    # Q_bs = Q_bs[Q_bs >= Qlim]
+    # #t_baseline = []
+    # for idx in range(len(Q_bs)):
+    #     s = sol_baseline.cycles[idx]
+    #     y, _ = extract_y0_yend(s)
+    #     L_bs.append(y["L_sei"])
+    #     LLI_bs.append(y["LLI_sei"])
+    #     eps_n_bs.append(y["eps_n"])
+    #     eps_p_bs.append(y["eps_p"])
         #t_baseline.append(s["Time [h]"].entries[0])
 
-    t_baseline = np.arange(len(eps_p_bs))
+    # t_baseline = np.arange(len(eps_p_bs))
+    t_baseline = np.asarray(t_bs) / t_bs[-1]
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")

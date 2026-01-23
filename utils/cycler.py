@@ -119,6 +119,8 @@ class DynamicProfile(Step):
 
         super().__init__(I, None, Cutoff_I=None, Vlim=V_lim)
 
+        # self.I[self.I > 0] = 0
+
     def simulate_step(self, soc0, R, Q_nom, OCV):
 
         self.soc0 = soc0
