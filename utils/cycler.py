@@ -16,6 +16,8 @@ class Step:
         self.t_duration = None
         self.I_avg = None
 
+        self.I_avg_dyn = {"p": 0., "n": 0.}
+
     def __call__(self, t):
         if self.socEND is None:
             raise Exception("Step not yet simulated")
@@ -125,7 +127,7 @@ class DynamicProfile(Step):
 
         self.soc0 = soc0
 
-        self.I_avg, self.t_duration, self.socEND = self._obtain_IaveDynamic(soc0, R, Q_nom, OCV)
+        self.I_avg, self.t_duration, self.socEND, self.I_avg_dyn = self._obtain_IaveDynamic(soc0, R, Q_nom, OCV)
 
     def _load_profile(self, filename):
         data = np.loadtxt(filename, skiprows=1)
@@ -144,6 +146,7 @@ class DynamicProfile(Step):
 
             if len(out_of_bounds) > 0:
                 idx = out_of_bounds[0]  # first occurrence
+                # Remember idx can go as high as len(soc_minus_ini)-1 because of dt, we want to give the next step
                 soc = soc_minus_ini[idx+1]
                 t = t[idx+1]
                 terminal = True
@@ -159,6 +162,8 @@ class DynamicProfile(Step):
         t_end = 0
         soc_cycle = soc0
 
+        I_comp = {"p": 0., "n": 0.}
+
         while not terminal or t_end > 1e6:
 
             soc_cycle, t, terminal = perform_cycle(soc_cycle, self.I, self.t_cycle, Q_nom, R, OCV)
@@ -167,9 +172,31 @@ class DynamicProfile(Step):
             if not self.cycle:
                 terminal = True
 
+            t_new = self.t_cycle[self.t_cycle <= t_end]
+            I_new = self.I[self.t_cycle <= t_end]
+            I_comp_p, I_comp_n = self._obtain_IaveCompensation(I_new, t_new)
+            I_comp["p"] += I_comp_p
+            I_comp["n"] += I_comp_n
+
         I_ave = (soc_cycle - soc0) * Q_nom / t_end
 
-        return I_ave, t_end, soc_cycle
+        I_comp["p"] /= t_end
+        I_comp["n"] /= t_end
+
+        return I_ave, t_end, soc_cycle, I_comp
+
+    @staticmethod
+    def _obtain_IaveCompensation(I, t):
+
+        I_p = I.copy()
+        I_p[I_p < 0] = 0
+        I_comp_p = np.trapz(I_p, t)
+        # Get Iave for positive current profile taking t into account
+
+        I_n = I.copy()
+        I_n[I_n > 0] = 0
+        I_comp_n = np.trapz(I_n, t)
+        return I_comp_p, I_comp_n
 
 class PowerProfile(Step):
     def __init__(self, V_lim, P, t):

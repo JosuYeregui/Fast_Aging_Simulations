@@ -134,7 +134,7 @@ def eval_delta_y(y_vec, sim, param_input, parameter_values):
 
 def scipy_rk23_integrate(y0_vec, sol_0, sim,
                          param_input, parameter_values,
-                         t_final, rtol=1e-2, atol=1e-2,
+                         t_final, max_step, rtol=1e-2, atol=1e-2,
                          stop_condition_fn=None):
 
     # Wrapper converting SciPy call signature f(t,y) → dy/dt
@@ -149,7 +149,7 @@ def scipy_rk23_integrate(y0_vec, sol_0, sim,
     rhs.param = param_input
 
     solver = RK23(rhs, t0=0.0, y0=y0_vec, t_bound=t_final,
-                  max_step=t_final, rtol=rtol, atol=atol)
+                  max_step=max_step, rtol=rtol, atol=atol)
 
     history = [(0.0, y0_vec.copy(), sol_0)]
     idx = 1
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     cs_ini = param_input["Initial concentration in negative electrode [mol.m-3]"]
     prev_params = deepcopy(param)
 
-    cycle = np.loadtxt("../Dynamic_Profiles/WLTC.txt", skiprows=1)
+    cycle = np.loadtxt("../Dynamic_Profiles/UDDS.txt", skiprows=1)
     cycle[:, 0] -= 1
     cycle[:, 1] *= -1
     # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     y0_vec, _ = extract_y0_yend(sol_0)
     y0_vec = y_dict_to_vec(y0_vec)
 
-    experiment = drive_step
+    experiment = pybamm.Experiment([drive_step, "Charge at 0.3C until 4.2 V", "Hold at 4.2V until 0.05C"])
     sim = pybamm.Simulation(spm, experiment=experiment, parameter_values=param)
 
     history = scipy_rk23_integrate(
@@ -269,6 +269,7 @@ if __name__ == "__main__":
         param_input=param_input,
         parameter_values=param,
         t_final=float(tot_cycles),  # e.g. 1000
+        max_step=50,
         rtol=1e-2,
         atol=1e-2,
         stop_condition_fn=None  # optional early-stop
@@ -278,7 +279,7 @@ if __name__ == "__main__":
     import pickle
 
     # After running history = scipy_rk23_integrate(...)
-    filename = "simulation_history_luzea.pkl"
+    filename = "simulation_history_UDDS_wCharge.pkl"
 
     with open(filename, "wb") as f:
         pickle.dump(history, f)

@@ -110,7 +110,8 @@ if __name__ == "__main__":
     #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
     # ]
     steps = [
-        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="../Dynamic_Profiles/WLTC.txt")
+        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="../Dynamic_Profiles/WLTC.txt"),
+        CCStep(I=1, V_end=4.2)
     ]
     from copy import deepcopy as copy
     cycl = Cycler(
@@ -150,7 +151,7 @@ if __name__ == "__main__":
     LLI = history["LLI"]
     Q_ode = history["Q"]
 
-    with open("simulation_history_luzea.pkl", "rb") as f:
+    with open("simulation_history_luzea_wCharge.pkl", "rb") as f:
         sulzer = pickle.load(f)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
@@ -173,11 +174,11 @@ if __name__ == "__main__":
     plt.show()
 
     fig, ax = plt.subplots()
-    ax.plot(cycles, LAMn, label="\epsilon_n Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode), eps_n_ode, label="\epsilon_n ODE",
+    ax.scatter(cycles, LAMn, label="\epsilon_n Baseline", color="blue")
+    ax.plot(np.asarray(t_ode), eps_n_ode, label="\epsilon_n ODE",
                c="blue")
-    ax.plot(cycles, LAMp, label="\epsilon_p Baseline", color="orange")
-    ax.scatter(np.asarray(t_ode), eps_p_ode, label="\epsilon_p ODE",
+    ax.scatter(cycles, LAMp, label="\epsilon_p Baseline", color="orange")
+    ax.plot(np.asarray(t_ode), eps_p_ode, label="\epsilon_p ODE",
                c="orange")
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")

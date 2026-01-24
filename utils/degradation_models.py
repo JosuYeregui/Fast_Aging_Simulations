@@ -19,7 +19,7 @@ def get_dif(y, t, cycler, input_vars):
 
 def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
     # I, _ = cycler(t/3600.)
-    I_all = np.asarray([s.I_avg for s in cycler.steps])
+    I_all = np.asarray([s.I_avg - s.I_avg_dyn[domain] for s in cycler.steps])
     if domain == "p":
         I_all[I_all > 0] = 0
     else:
