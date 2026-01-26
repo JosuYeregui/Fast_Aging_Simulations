@@ -179,7 +179,7 @@ def scipy_rk23_integrate(y0_vec, sol_0, sim,
 # sol_baseline.cycles[-1].steps[-1].y_slices
 if __name__ == "__main__":
 
-    tot_cycles = 1000 # Total cycles to simulate
+    tot_cycles = 5000 # Total cycles to simulate
     n_cycles = 25 # each how many cycles to extrapolate
 
     param_chen = pybamm.ParameterValues("Chen2020")
@@ -189,9 +189,9 @@ if __name__ == "__main__":
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 10
-    param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
-    param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
+    param["EC diffusivity [m2.s-1]"] /= 200
+    param["Positive electrode LAM constant proportional term [s-1]"] /= 600.
+    param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
     param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     cs_ini = param_input["Initial concentration in negative electrode [mol.m-3]"]
     prev_params = deepcopy(param)
 
-    cycle = np.loadtxt("../Dynamic_Profiles/UDDS.txt", skiprows=1)
+    cycle = np.loadtxt("../Dynamic_Profiles/WLTC.txt", skiprows=1)
     cycle[:, 0] -= 1
     cycle[:, 1] *= -1
     # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
@@ -269,9 +269,9 @@ if __name__ == "__main__":
         param_input=param_input,
         parameter_values=param,
         t_final=float(tot_cycles),  # e.g. 1000
-        max_step=50,
-        rtol=1e-2,
-        atol=1e-2,
+        max_step=tot_cycles,
+        rtol=1e-3,
+        atol=1e-3,
         stop_condition_fn=None  # optional early-stop
     )
     extrap_time = time.time() - start_extrap_time
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     import pickle
 
     # After running history = scipy_rk23_integrate(...)
-    filename = "simulation_history_UDDS_wCharge.pkl"
+    filename = "simulation_charge_WLTC.pkl"
 
     with open(filename, "wb") as f:
         pickle.dump(history, f)

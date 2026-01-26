@@ -30,12 +30,11 @@ def scipy_rk23_integrate(y0_vec, input_vars,
     n_cycles = 0.
     Q0 = cycler.Q
     Q = cycler.Q
-    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "LLI": [], "Q": [], "R": [], "soc": []}
+    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "Q": [], "R": [], "soc": []}
     history["t [s]"].append(0.)
     history["n_cycles"].append(n_cycles)
     history["y"].append(y0_vec)
     history["times"].append(cycler.times)
-    history["LLI"].append(0.)
     history["Q"].append(Q0)
     history["R"].append(cycler.R)
     history["soc"].append(cycler.soc0)
@@ -50,7 +49,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
         try:
             L0 =  history["y"][-1][0]
             R0 = cycler.R
-            Q, LLI = updated_model_Q(y, input_vars, cycler, L0)
+            Q = updated_model_Q(y, input_vars, cycler, L0)
             # Q, LLI = updated_model_Q(y, Q, eps_0, input_vars, L0, deepcopy(param))
             R = updated_model_R(y, input_vars, L0, R0)
             n_cycles += cycler.get_n_cycles(t / 3600., history["t [s]"][-1] / 3600.)
@@ -61,7 +60,6 @@ def scipy_rk23_integrate(y0_vec, input_vars,
             history["n_cycles"].append(n_cycles)
             history["y"].append(y)
             history["times"].append(cycler.times)
-            history["LLI"].append(LLI)
             history["Q"].append(Q)
             history["R"].append(R)
             history["soc"].append(cycler.soc[-1])

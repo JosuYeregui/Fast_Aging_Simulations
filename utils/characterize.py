@@ -187,7 +187,7 @@ def updated_model_Q(y, input_vars, cycler, L0):
     # From parameters, get Q
     Q = get_Q(input_vars, y)
 
-    return Q, LLI
+    return Q
 
 
 def updated_model_R(y, input_vars, L0, R0):

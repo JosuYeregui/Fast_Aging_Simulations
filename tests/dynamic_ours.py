@@ -69,29 +69,17 @@ if __name__ == "__main__":
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 10
-    param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
-    param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
+    param["EC diffusivity [m2.s-1]"] /= 200
+    param["Positive electrode LAM constant proportional term [s-1]"] /= 600.
+    param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
     param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
 
-    cycle = np.loadtxt("../Dynamic_Profiles/WLTC.txt", skiprows=1)
-    cycle[:, 0] -= 1
-    cycle[:, 1] *= -1
-
-    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
-
-    model.submodels["Negative active material"] = StressBasedLAM_FP(model.param, "Negative", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
-
-    model.submodels["Positive active material"] = StressBasedLAM_FP(model.param, "Positive", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
-
-    model.build_model()
-
     input_vars = load_params("../input/M50_okane_modified.yaml")
-    input_vars["D_ec"] /= 10
-    input_vars["Beta_n"] *= 200
-    input_vars["Beta_p"] /= 100
+    input_vars["D_ec"] /= 200
+    input_vars["Beta_p"] /= 600
+    input_vars["Beta_n"] *= 20
 
     Q0 = input_vars["Q"]
     Q = copy.deepcopy(Q0)
@@ -100,20 +88,25 @@ if __name__ == "__main__":
 
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"]]
 
-    steps = [
-        CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-        CCStep(I=-1, V_end=3.)
-    ]
+    # steps = [
+    #     CCStep(I=1.5, V_end=3.5),
+    #     CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    #     CCStep(I=-1, V_end=3.)
+    # ]
     # steps = [
     #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
     #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
     # ]
+    # steps = [
+    #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="../Dynamic_Profiles/WLTC.txt"),
+    #     CCStep(I=1, V_end=4.2)
+    # ]
+
     steps = [
-        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="../Dynamic_Profiles/WLTC.txt"),
-        CCStep(I=1, V_end=4.2)
+        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../Dynamic_Profiles/WLTC.txt"),
+        CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.25, Vlim=[2.5, 4.2])
     ]
-    from copy import deepcopy as copy
+
     cycl = Cycler(
         steps=steps,
         SOC0=initial_soc,
@@ -148,10 +141,9 @@ if __name__ == "__main__":
     eps_n_ode = history["y"][:, 1]
     eps_p_ode = history["y"][:, 2]
     t_final_evol = history["times"]
-    LLI = history["LLI"]
     Q_ode = history["Q"]
 
-    with open("simulation_history_luzea_wCharge.pkl", "rb") as f:
+    with open("simulation_charge_WLTC.pkl", "rb") as f:
         sulzer = pickle.load(f)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
@@ -187,12 +179,6 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    # Plot LLI_sei
-    fig, ax = plt.subplots()
-    ax.scatter(np.asarray(t_ode), LLI, label="ODE", color="red")
-    ax.legend()
-    ax.set_xlabel("cycles")
-    plt.show()
 
     # Plot Q
     fig, ax = plt.subplots()
@@ -200,4 +186,11 @@ if __name__ == "__main__":
     ax.plot(np.asarray(t_ode), Q_ode, label="ODE", color="red")
     ax.legend()
     ax.set_xlabel("cycles")
+    ax.set_ylabel("Q [A.h]")
     plt.show()
+
+    # fig, ax = plt.subplots()
+    # ax.plot(np.asarray(t_ode), t_final_evol, label="ODE", color="blue")
+    # ax.legend()
+    # ax.set_xlabel("cycles")
+    # plt.show()
