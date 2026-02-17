@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     # -------------- Load parameters ----------------
 
-    input_vars = load_params("./input/M50_okane_modified.yaml")
+    input_vars = load_params("./input/M50_okane_modified_plating.yaml")
     input_vars["D_ec"] /= 200
     input_vars["Beta_p"] /= 600
     input_vars["Beta_n"] *= 20
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # ---------- Define simulation steps -------------
 
     steps = [
-        CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.25, Vlim=[2.5, 4.2]),
+        CCCVStep(I=1., V_end=4.2, Cutoff_I=0.25, Vlim=[2.5, 4.2]),
         CCStep(I=-1.5, V_end=2.5),
     ]
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     # -------------- Run simulation ---------------
 
-    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"]]
+    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     start_ode_time = time.time()
     history = scipy_rk23_integrate(
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         tot_cycles=tot_cycles,
         cycler=cycl,
         stop_Q=0.6,
-        rtol=[1e-3, 1e-3, 1e-3],
-        atol=[1e-9 ,1e-4, 1e-4],
+        rtol=[1e-3, 1e-3, 1e-3, 1e-3],
+        atol=[1e-9 ,1e-4, 1e-4, 1e-7],
         stop_condition_fn=None,  # optional early-stop
         max_step=None
     )
@@ -68,6 +68,7 @@ if __name__ == "__main__":
     L_ode = history["y"][:, 0]
     eps_n_ode = history["y"][:, 1]
     eps_p_ode = history["y"][:, 2]
+    plating_ode = history["y"][:, 3]
     t_final_evol = history["times"]
     Q_ode = history["Q"]
 
@@ -93,6 +94,14 @@ if __name__ == "__main__":
     #           c="red")
     ax.set_xlabel("cycles")
     ax.set_ylabel("\\epsilon")
+    plt.show()
+
+    # Plot Plating
+    fig, ax = plt.subplots()
+    ax.scatter(np.asarray(t_ode), plating_ode, label="Plating ODE", color="green", s=80)
+    ax.plot(np.asarray(t_ode), plating_ode, label="Plating ODE", color="green", linestyle="dashed")
+    ax.set_xlabel("cycles")
+    ax.set_ylabel("Plating [m]")
     plt.show()
 
     # Plot Q

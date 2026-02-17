@@ -14,7 +14,9 @@ def get_dif(y, t, cycler, input_vars):
 
     deps_dt_p = stressLAM_deps_dt(t, y[2], cycler, input_vars, "p")
 
-    return [dLdt, deps_dt_n, deps_dt_p]
+    dPl_dt = dPlating_dt(t, y, cycler, input_vars)
+
+    return [dLdt, deps_dt_n, deps_dt_p, dPl_dt]
 
 
 def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
@@ -140,14 +142,24 @@ def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5
             i += 1
     return L[-1]
 
-# def dPlating_dt(t, y, cycler, input_vars):
-#     I, soc = cycler(t/3600.)
-#     # Compute plating rate based on current and available lithium
-#     RTF = input_vars["R"]*input_vars["T"]/input_vars["F"]
-#     eta_r = -2 * RTF * np.asinh(I/(input_vars["as_n"] * j0 * input_vars["L_n"]))
-#
-#     ocp = input_vars["U_n"](soc)
-#     eta_plating = eta_r + ocp
-#
-#     plating_rate =
-#     return plating_rate
+def dPlating_dt(t, y, cycler, input_vars):
+    I, soc = cycler(t/3600.)
+    I = -I / input_vars["A"]
+
+    as_n = 3 * y[1] / input_vars["R_n"]  # specific surface area of the negative electrode
+
+    ce_int = (input_vars["ce_0"] + I * (1- input_vars["t_plus"])/input_vars["F"] *
+              (input_vars["L_n"] / (3* input_vars["Deff_n"])- input_vars["L_s"]/ (2* input_vars["Deff_s"])))
+    ce_int =  ce_int /input_vars["ce_0"]
+
+    sol_n = soc * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
+    j0 = np.sqrt(ce_int) * np.sign(sol_n) * np.sqrt(1 - sol_n) * input_vars["m_n"] * input_vars["F"]
+    # Compute plating rate based on current and available lithium
+    RTF = input_vars["R"]*input_vars["T"]/input_vars["F"]
+    eta_r = -2 * RTF * np.asinh(I/(as_n * j0 * input_vars["L_n"]))
+
+    ocp = input_vars["U_n"](sol_n)
+    eta_plating = -(eta_r + ocp)
+
+    plating_rate = input_vars["k_plating"] * np.exp(input_vars["alpha_plating"] * eta_plating / RTF)
+    return plating_rate

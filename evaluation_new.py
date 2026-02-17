@@ -144,7 +144,7 @@ if __name__ == "__main__":
     R = input_vars["R_int"]
     OCV_fn = get_OVC_func(input_vars)
 
-    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"]]
+    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     steps = [
         CCStep(I=1.5, V_end=3.5),

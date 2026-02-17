@@ -30,6 +30,7 @@ def write_all_params_to_yaml(param, model, yaml_file):
         "model": {},
         "LAM": {},
         "SEI": {},
+        "Plating": {}
     }
 
     # ---------------- Global ----------------
@@ -74,6 +75,21 @@ def write_all_params_to_yaml(param, model, yaml_file):
     sei["rho_SEI"] = param["SEI resistivity [Ohm.m]"]
     sei["A_ec"] = sei["c_ec"] * sei["V_SEI"] / sei["z_SEI"]
 
+    # ----------------- Plating ----------------
+    plating = data["Plating"]
+    plating["k_plating"] = float(param.get("Plating kinetic rate constant [m.s-1]", 1e-12))
+    plating["alpha_plating"] = float(param.get("Plating charge transfer coefficient", 0.5))
+    plating["ce_0"] = float(param.get("Initial concentration of lithium in electrolyte [mol.m-3]", 1000))
+    plating["t_plus"] = float(param.get("Lithium transference number", 0.3))
+    brug_n = param["Negative electrode Bruggeman coefficient (electrolyte)"]
+    por_n = param["Negative electrode active material volume fraction"]
+    brug_s = param["Separator Bruggeman coefficient (electrolyte)"]
+    por_s = param["Separator porosity"]
+    plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_n ** brug_n)
+    plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_s ** brug_s)
+    plating["L_s"] = float(param["Separator thickness [m]"])
+    plating["m_ref"] = 1e-5
+
     # ---------------- Battery model ----------------
     x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
 
@@ -112,7 +128,7 @@ def Chen2020_U_p(sol):
 
 # LOADERS
 
-def load_params(yaml_file, load_LAM=True, load_SEI=True):
+def load_params(yaml_file, load_LAM=True, load_SEI=True, load_plating=True):
     """
     Load parameters from YAML and attach functions from registry.
     """
@@ -126,8 +142,8 @@ def load_params(yaml_file, load_LAM=True, load_SEI=True):
         _load_LAM(cfg, input_vars)
     if load_SEI:
         _load_SEI(cfg, input_vars)
-
-
+    if load_plating:
+        _load_plating(cfg, input_vars)
 
     return input_vars
 
@@ -176,7 +192,7 @@ def _load_SEI(cfg, input_vars):
         else:
             input_vars[k] = v
 
-    def k_exp(soc):
+    def k_exp(soc): # TODO: Sieso sartukoziou csurf-ekiko cave beharrean
         x_0 = input_vars["x_0"]
         x_100 = input_vars["x_100"]
         sol_n = soc * (x_100 - x_0) + x_0
@@ -187,6 +203,16 @@ def _load_SEI(cfg, input_vars):
         ) * input_vars["k_sei"]
 
     input_vars["k_exp"] = k_exp
+
+# ---------------- Plating ----------------
+def _load_plating(cfg, input_vars):
+    plating = cfg["Plating"]
+    for k, v in plating.items():
+        if k.endswith("_function"):
+            # map function name to actual Python function
+            input_vars[k] = FUNCTION_REGISTRY[v]
+        else:
+            input_vars[k] = v
 
 # LEGACY
 
@@ -312,9 +338,9 @@ if __name__ == "__main__":
         "loss of active material": "stress-driven"}, x_average=True, phase="primary")
     model.build_model()
 
-    write_all_params_to_yaml(param, model,"../input/M50_okane_modified.yaml")
+    write_all_params_to_yaml(param, model,"../input/M50_okane_modified_plating.yaml")
 
-    loaded_param = load_params("../input/M50_okane_modified.yaml")
+    loaded_param = load_params("../input/M50_okane_modified_plating.yaml")
     loaded_param["x_0"] = 0.
     loaded_param["x_100"] = 1.
     print(loaded_param)
