@@ -235,7 +235,7 @@ if __name__ == "__main__":
     cs_ini = param_input["Initial concentration in negative electrode [mol.m-3]"]
     prev_params = deepcopy(param)
 
-    cycle = np.loadtxt("../Dynamic_Profiles/WLTC.txt", skiprows=1)
+    cycle = np.loadtxt("../Dynamic_Profiles/UDDS.txt", skiprows=1)
     cycle[:, 0] -= 1
     cycle[:, 1] *= -1
     # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     import pickle
 
     # After running history = scipy_rk23_integrate(...)
-    filename = "simulation_charge_WLTC.pkl"
+    filename = "simulation_charge_UDDS.pkl"
 
     with open(filename, "wb") as f:
         pickle.dump(history, f)

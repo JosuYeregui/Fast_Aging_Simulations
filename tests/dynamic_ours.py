@@ -81,9 +81,6 @@ if __name__ == "__main__":
     input_vars["Beta_p"] /= 600
     input_vars["Beta_n"] *= 20
 
-    Q0 = input_vars["Q"]
-    Q = copy.deepcopy(Q0)
-    R = input_vars["R_int"]
     OCV_fn = get_OVC_func(input_vars)
 
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"]]
@@ -103,23 +100,19 @@ if __name__ == "__main__":
     # ]
 
     steps = [
-        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../Dynamic_Profiles/WLTC.txt"),
+        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../Dynamic_Profiles/UDDS.txt"),
         CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.25, Vlim=[2.5, 4.2])
     ]
 
     cycl = Cycler(
         steps=steps,
         SOC0=initial_soc,
-        R=R,
-        Q=Q,
+        R=input_vars["R_int"],
+        Q=input_vars["Q"],
         OCV_fn=OCV_fn
     )
 
-    soc_ave = cycl.get_soc_ave()
-    sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
-    input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
-    sol_p = soc_ave * (input_vars["y_100"] - input_vars["y_0"]) + input_vars["y_0"]
-    input_vars["cini_p_0"] = sol_p * input_vars["csmax_p"]
+    input_vars = set_c_ini(cycl, input_vars)
 
     start_ode_time = time.time()
     history = scipy_rk23_integrate(
@@ -143,7 +136,7 @@ if __name__ == "__main__":
     t_final_evol = history["times"]
     Q_ode = history["Q"]
 
-    with open("simulation_charge_WLTC.pkl", "rb") as f:
+    with open("simulation_charge_UDDS.pkl", "rb") as f:
         sulzer = pickle.load(f)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
@@ -155,8 +148,8 @@ if __name__ == "__main__":
     cycles = [t for (t, _, _) in sulzer]
 
     fig, ax = plt.subplots()
-    ax.plot(cycles, Lsei, label="Baseline")
-    ax.scatter(np.asarray(t_ode), L_ode, label="ODE",
+    ax.scatter(cycles, Lsei, label="Baseline")
+    ax.plot(np.asarray(t_ode), L_ode, label="ODE",
                c="red")
     #ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")

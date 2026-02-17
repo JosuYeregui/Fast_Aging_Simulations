@@ -1,0 +1,73 @@
+# -----------------------------------------------------------------------------
+# ELECTRODE PARAMETERS (LAM: Loss of Active Material)
+# -----------------------------------------------------------------------------
+LAM:
+  n: # Negative Electrode (Anode)
+    Beta: 2.7778e-07          # Partial molar volume of species [m^3/mol]
+    D: 3.3e-14                # Lithium diffusion coefficient in solid phase [m^2/s]
+    E: 15000000000.0          # Young's Modulus (Elasticity) [Pa]
+    L: 8.52e-05               # Thickness of the anode layer [m]
+    Omega: 3.1e-06            # Partial molar volume for stress calculations [m^3/mol]
+    R: 5.86e-06               # Mean radius of active material particles [m]
+    U: Chen2020_U_n           # Reference function for Open Circuit Potential (OCP)
+    cini: 29866.0             # Initial lithium concentration [mol/m^3]
+    csmax: 33133.0            # Maximum theoretical lithium concentration [mol/m^3]
+    eps_0: 0.75               # Initial active material volume fraction (1 - porosity)
+    m: 2.0                    # Stress-strain exponent (mechanical fatigue parameter)
+    nu: 0.3                   # Poisson's ratio (lateral vs axial strain)
+    omega_fact: 3             # Geometry factor for stress (sphere = 3)
+    stress_critical: 60000000.0 # Fracture/yield stress threshold [Pa]
+
+  p: # Positive Electrode (Cathode)
+    Beta: 2.7778e-07          # Partial molar volume [m^3/mol]
+    D: 4.0e-15                # Lithium diffusion coefficient [m^2/s]
+    E: 375000000000.0         # Young's Modulus (Cathode is much stiffer than anode) [Pa]
+    L: 7.56e-05               # Thickness of the cathode layer [m]
+    Omega: 1.25e-05           # Partial molar volume [m^3/mol]
+    R: 5.22e-06               # Mean radius of active material particles [m]
+    U: Chen2020_U_p           # Reference function for OCP
+    cini: 17038.0             # Initial lithium concentration [mol/m^3]
+    csmax: 63104.0            # Maximum theoretical concentration [mol/m^3]
+    eps_0: 0.665              # Initial active material volume fraction
+    m: 2.0                    # Stress-strain exponent
+    nu: 0.2                   # Poisson's ratio
+    omega_fact: 3             # Geometry factor
+    stress_critical: 375000000.0 # Fracture threshold [Pa]
+
+# -----------------------------------------------------------------------------
+# SEI LAYER (Solid Electrolyte Interphase) - Degradation Parameters
+# -----------------------------------------------------------------------------
+SEI:
+  A_ec: 0.43525485            # Activation energy for EC solvent reduction
+  D_ec: 2.0e-18               # Diffusion coefficient of solvent through the SEI [m^2/s]
+  L_0: 5.0e-09                # Initial thickness of the SEI layer [m]
+  R: 8.314462618              # Universal Gas Constant [J/(mol*K)]
+  T: 298.15                   # Reference temperature [K] (25°C)
+  U_sei: 0.4                  # Equilibrium potential for SEI formation [V]
+  V_SEI: 9.585e-05            # Molar volume of the produced SEI layer [m^3/mol]
+  alpha: 0.5                  # Charge transfer coefficient (symmetry factor)
+  c_ec: 4541.0                # Concentration of solvent in the electrolyte [mol/m^3]
+  k_sei: 1.0e-12              # Reaction rate constant for SEI growth [m/s]
+  rho_SEI: 200000.0           # Density of the SEI layer [kg/m^3]
+  z_SEI: 1.0                  # Number of electrons transferred in SEI reaction
+
+# -----------------------------------------------------------------------------
+# GLOBAL CONSTANTS & BOUNDARY CONDITIONS
+# -----------------------------------------------------------------------------
+global:
+  A: 0.1027                   # Total active surface area of the electrode [m^2]
+  F: 96485.33212              # Faraday's Constant [C/mol]
+  Q_nom: 5.0                  # Nominal capacity rating [Ah]
+  V_max: 4.2                  # Upper cutoff voltage [V]
+  V_min: 2.5                  # Lower cutoff voltage [V]
+  x_0: 0.026347               # Stoichiometry of anode at 0% SoC (min Li-content)
+  x_100: 0.910612             # Stoichiometry of anode at 100% SoC (max Li-content)
+  y_0: 0.853973               # Stoichiometry of cathode at 0% SoC (max Li-content)
+  y_100: 0.263849             # Stoichiometry of cathode at 100% SoC (min Li-content)
+
+# -----------------------------------------------------------------------------
+# ECM MODEL STATE
+# -----------------------------------------------------------------------------
+model:
+  Q: 5.153154978862171        # Actual calculated capacity [Ah]
+  R_int: 0.049490040946800914 # Total internal resistance [Ohm]

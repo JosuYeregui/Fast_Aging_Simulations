@@ -139,3 +139,15 @@ def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5
 
             i += 1
     return L[-1]
+
+# def dPlating_dt(t, y, cycler, input_vars):
+#     I, soc = cycler(t/3600.)
+#     # Compute plating rate based on current and available lithium
+#     RTF = input_vars["R"]*input_vars["T"]/input_vars["F"]
+#     eta_r = -2 * RTF * np.asinh(I/(input_vars["as_n"] * j0 * input_vars["L_n"]))
+#
+#     ocp = input_vars["U_n"](soc)
+#     eta_plating = eta_r + ocp
+#
+#     plating_rate =
+#     return plating_rate

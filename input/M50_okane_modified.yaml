@@ -9,7 +9,7 @@ LAM:
     U: Chen2020_U_n
     cini: 29866.0
     csmax: 33133.0
-    eps_0: 0.75
+    eps_0: 0.75  # Initial active material volume fraction
     m: 2.0
     nu: 0.3
     omega_fact: 3

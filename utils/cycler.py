@@ -6,6 +6,16 @@ from matplotlib import pyplot as plt
 
 
 class Step:
+    """
+    Base class to handle a step in battery cycling.
+    A step can be a constant current (CC) charge/discharge, constant current-constant
+    voltage (CCCV) charge/discharge, rest, or dynamic profile.
+
+    :param I: Current during the step [A]
+    :param V_end: Target voltage at the end of the step [V]
+    :param Cutoff_I: Cutoff current for CV step [A]
+    :param Vlim: Voltage limits for the battery operation, [Vmin, Vmax] [V]
+    """
     def __init__(self, I, V_end, Cutoff_I=None, Vlim=None):
         self.I = I
         self.V_end = V_end
@@ -31,16 +41,30 @@ class Step:
         self.simulate_step(*args, **kwargs)
 
     def _obtain_IaveCC(self, soc0, R, Q_nom, OCV, dt=0.1):
+        """
+        Obtain average current and duration for a CC step.
 
-        I_avg = self.I
+        :param soc0: Starting state of charge [0-1]
+        :param R: Internal resistance [Ohm]
+        :param Q_nom: Nominal capacity [Ah]
+        :param OCV: Open-circuit voltage function
+        :param dt: Discretization time step [s]
+        :return: t_end, I_avg, soc_end: Duration of the step [s], average current [A],
+                 and state of charge at the end of the step [0-1]
+        """
 
+        I_avg = self.I  # The average current is equal to the applied current in CC
+
+        # Create SOC array to evaluate OCV
         if np.sign(I_avg) == 1:
             soc_array = np.arange(soc0, 1.01, step=dt * I_avg / Q_nom)
         else:
             soc_array = np.arange(soc0, -0.01, step=dt * I_avg / Q_nom)
         V_ocv = OCV(soc_array)
+        # Compute the target OCV value. When will the terminal voltage reach V_end?
         V_tar = self.V_end - I_avg * R
 
+        # Find the crossing index
         try:
             if np.sign(I_avg) == 1:
                 idx_cross = np.where(V_ocv > V_tar)[0][0]
@@ -49,21 +73,34 @@ class Step:
         except:
             idx_cross = 0
 
+        # If none found, set to end
         if idx_cross == 0:
             t_end = dt
-
+        # Else, interpolate to get t_end
         else:
-            t0 = (idx_cross - 1) * dt
-            # Interpolate to get t_end
+            t0 = (idx_cross - 1) * dt  # time at previous step
             t_end = t0 + dt / (V_ocv[idx_cross] - V_ocv[idx_cross - 1]) * (V_tar - V_ocv[idx_cross - 1])
 
         return t_end, I_avg, soc0 + I_avg * t_end / Q_nom
 
     def _obtain_IaveCV(self, soc0, R, Q_nom, OCV, I_cut):
+        """
+        Obtain average current and duration for a CV step.
 
+        :param soc0: Starting state of charge [0-1]
+        :param R: Internal resistance [Ohm]
+        :param Q_nom: Nominal capacity [Ah]
+        :param OCV: Open-circuit voltage function
+        :param I_cut: Cutoff current [A]
+        :return: I_ave, t_end, soc_end: Average current [A], duration of the step [s],
+                 and state of charge at the end of the step [0-1]
+        """
+
+        # Estimate time to reach cutoff current
         soc_est = 1. if self.I > 0 else 0.
         Vlim = self.Vlim[1] if self.I > 0 else self.Vlim[0]
-        #b = (self.V_end - OCV(soc0)) / (soc_est - soc0)
+
+        # With a OCV-R model we can derive an analytical expression (linear)
         b = (Vlim - OCV(soc0)) / (soc_est - soc0)
         if b <= 0:
             return 0, 0, soc0
@@ -73,6 +110,25 @@ class Step:
         I_ave = self.I / t_end * (R * Q_nom) / b * (1 - np.exp(-b * t_end / (R * Q_nom)))
         return I_ave, t_end, soc0 + I_ave * t_end / Q_nom
 
+class Rest(Step):
+    """
+    Class to handle rest steps in battery cycling.
+    During a rest step, the battery is neither charged nor discharged,
+    and the current is set to zero for a specified duration.
+
+    :param t: Duration of the rest step [s]
+    """
+    def __init__(self, t):
+        super().__init__(0., None)
+
+        self.t_duration = t
+
+    def simulate_step(self, soc0, R, Q_nom, OCV, dt=0.001):
+
+        self.I_avg = 0.
+        self.t_duration = self.t_duration
+        self.soc0 = soc0
+        self.socEND = soc0
 
 class CCStep(Step):
     def __init__(self, I, V_end):
@@ -104,9 +160,22 @@ class CCCVStep(Step):
 
 import time
 class DynamicProfile(Step):
+    """
+    Class to handle dynamic current profiles for battery cycling.
+    It can load current profiles from a file or accept them directly as input vectors.
+    The class simulates the battery behavior under the given current profile,
+    considering voltage limits and cycling options.
+
+    :param V_lim: Voltage limits for the battery operation, [Vmin, Vmax] [V]
+    :param cycle: Boolean indicating whether to repeat the profile cyclically [bool]
+    :param dir: File path to load the current profile from [str, optional]
+    :param I_vec: Current profile vector [array-like, optional]
+    :param t_vec: Time vector corresponding to the current profile [array-like, optional]
+    """
     def __init__(self, V_lim, cycle, dir=None, I_vec=None, t_vec=None):
         self.cycle = cycle
 
+        # Check if a directory is provided to load the profile, else expect vectors
         if dir is not None:
             I, t = self._load_profile(dir)
             I = I
@@ -120,8 +189,6 @@ class DynamicProfile(Step):
         self.t_cycle= t
 
         super().__init__(I, None, Cutoff_I=None, Vlim=V_lim)
-
-        # self.I[self.I > 0] = 0
 
     def simulate_step(self, soc0, R, Q_nom, OCV):
 
@@ -213,6 +280,14 @@ class PowerProfile(Step):
         self.I_avg, self.t_duration, self.socEND = self._obtain_IavePower(soc0, R, Q_nom, OCV)
 
     def _obtain_IavePower(self, soc0, R, Q_nom, OCV):
+        """
+        Obtain average current and duration for a power profile step.
+        :param soc0: Starting state of charge [0-1]
+        :param R:
+        :param Q_nom:
+        :param OCV:
+        :return:
+        """
 
         P = self.P
         t = self.t_cycle
@@ -252,12 +327,25 @@ class PowerProfile(Step):
                 break
             t_end += dt[k]
 
+        # Average current is computed from SOC change
         I_ave = (soc - soc0) * Q_nom / t_end if t_end > 0 else 0.0
 
         return I_ave, t_end, soc
 
 
 class Cycler:
+    """
+    Class to manage a sequence of battery operation steps (charging, discharging, resting).
+    It tracks the state of charge (SoC) and time progression through the defined steps,
+    allowing for simulation of battery cycling behavior.
+
+    :param steps: List of Step objects defining the sequence of operations [Step list]
+    :param SOC0: Initial state of charge (SoC) at the start of the cycle [0-1]
+    :param R: Internal resistance of the battery [Ohm]
+    :param Q: Battery capacity [Ah]
+    :param OCV_fn: Function to compute open-circuit voltage (OCV) based on SoC
+    """
+
     def __init__(self, steps, SOC0, R, Q, OCV_fn):
         self.steps = steps
         self.soc0 = SOC0
@@ -270,11 +358,20 @@ class Cycler:
         self._build()
 
     def _build(self):
+        """
+        Builds the sequence of states of charge (SoC) and time progression for a series of simulation
+        steps. Tracks the resulting total time and state changes after each step.
 
+        :return: None
+        """
+
+        # Initialize the first state of charge
         soc = self.soc0
         self.soc = [soc]
         total_time = 0.0
         times = [0.]
+
+        # Loop through each step in the sequence
         for step in self.steps:
             step.simulate_step(soc, self.R, self.Q, self.OCV)
 
@@ -287,6 +384,12 @@ class Cycler:
         self.times = times
 
     def add_step(self, step):
+        """
+        Adds a new simulation step to the cycler, updating the cycler variables
+
+        :param step: New simulation step to be added
+        :return: None
+        """
 
         soc = self.soc[-1]
         step.simulate_step(soc, self.R, self.Q, self.OCV)
@@ -297,8 +400,18 @@ class Cycler:
         self.times.append(self.total_time)
 
     def __call__(self, t):
+        """
+        Given a time t, returns the average current and state of charge (SoC)
+        at that time by determining the appropriate step in the sequence.
+
+        :param t: Time at which to evaluate the cycler
+        :return state: Tuple of average current and SoC at time t"""
+
+        # If the total time is zero, the first step function is called with an input of 0.
         if self.total_time == 0:
             return self.steps[0](0.)
+
+        # Find the step index corresponding to the given time
         mod_t = t % self.total_time
         idx = bisect.bisect_left(self.times[1:], mod_t)
         t_in = mod_t - self.times[idx]
@@ -306,6 +419,15 @@ class Cycler:
         return self.steps[idx](t_in)
 
     def update_cycle(self, R, Q, OCV_fn):
+        """
+        Updates the cycle parameters such as resistance (R), capacity (Q), and
+        open-circuit voltage function (OCV_fn). Rebuilds the cycle with the new
+        parameters.
+        :param R: Internal resistance
+        :param Q: Battery capacity
+        :param OCV_fn: Open-circuit voltage function
+        :return: None
+        """
         # self.times = [t * Q / self.Q for t in self.times]
         # self.total_time *= Q / self.Q
         self.R = R
@@ -315,10 +437,16 @@ class Cycler:
         self._build()
 
     def get_soc_ave(self):
+        """
+        Computes the average state of charge (SoC) over the entire cycle duration.
+        :return: soc_ave: Average state of charge over the cycle duration
+        """
 
+        # In some cases, total_time can be zero (e.g., Initial conditions not feasible)
         if self.total_time == 0:
             return self.soc0
 
+        # Calculate time-weighted average SoC
         soc_ave = np.zeros(len(self.soc) - 1)
         t_steps = np.diff(self.times)
         for i in range(len(self.soc)-1):
@@ -327,6 +455,12 @@ class Cycler:
         return np.sum(soc_ave) / self.total_time
 
     def get_n_cycles(self, t, t_prev):
+        """
+        Computes the number of cycles completed between two time points t_prev and t.
+        :param t: The final time point
+        :param t_prev: Previous execution time point
+        :return: n_cycles: Number of cycles completed between t_prev and t
+        """
 
         if self.total_time == 0:
             return 0.
