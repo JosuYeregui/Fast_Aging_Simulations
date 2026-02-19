@@ -53,7 +53,7 @@ if __name__ == "__main__":
         cycler=cycl,
         stop_Q=0.6,
         rtol=[1e-3, 1e-3, 1e-3, 1e-3],
-        atol=[1e-9 ,1e-4, 1e-4, 1e-7],
+        atol=[1e-9 ,1e-4, 1e-4, 1e-9],
         stop_condition_fn=None,  # optional early-stop
         max_step=None
     )

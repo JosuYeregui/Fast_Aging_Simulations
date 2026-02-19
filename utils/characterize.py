@@ -168,7 +168,7 @@ def get_Rint(model, param):
     return np.abs(median_R_int)
 
 
-def updated_model_Q(y, input_vars, cycler, L0):
+def updated_model_Q(y, input_vars, cycler, L0, L0_pl):
     soc_ave = cycler.get_soc_ave()
     sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
     input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
@@ -182,7 +182,10 @@ def updated_model_Q(y, input_vars, cycler, L0):
     A = input_vars["A"]
     a_s = y[1] * 3 / input_vars["R_n"]
     L = input_vars["L_n"]
-    LLI = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
+    LLI_SEI_stress = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
+    LLI_pl = (y[3] - L0_pl) * A * F / (input_vars["V_Li"] * 3600.) * a_s * L
+
+    LLI = LLI_SEI_stress + LLI_pl
 
     # Update parameters
     input_vars["cini_n"] = input_vars["cini_n_0"] - LLI / Qn * input_vars["csmax_n"]

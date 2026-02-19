@@ -48,8 +48,9 @@ def scipy_rk23_integrate(y0_vec, input_vars,
         y = solver.y.copy()          # full cycle solution used at this step
         try:
             L0 =  history["y"][-1][0]
+            L0_pl = history["y"][-1][3]
             R0 = cycler.R
-            Q = updated_model_Q(y, input_vars, cycler, L0)
+            Q = updated_model_Q(y, input_vars, cycler, L0, L0_pl)
             # Q, LLI = updated_model_Q(y, Q, eps_0, input_vars, L0, deepcopy(param))
             R = updated_model_R(y, input_vars, L0, R0)
             n_cycles += cycler.get_n_cycles(t / 3600., history["t [s]"][-1] / 3600.)

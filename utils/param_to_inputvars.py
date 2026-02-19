@@ -77,18 +77,19 @@ def write_all_params_to_yaml(param, model, yaml_file):
 
     # ----------------- Plating ----------------
     plating = data["Plating"]
-    plating["k_plating"] = float(param.get("Plating kinetic rate constant [m.s-1]", 1e-12))
-    plating["alpha_plating"] = float(param.get("Plating charge transfer coefficient", 0.5))
+    plating["k_plating"] = float(param.get("Lithium plating kinetic rate constant [m.s-1]", 1e-12))
+    plating["alpha_plating"] = float(param.get("Lithium plating transfer coefficient", 0.65))
     plating["ce_0"] = float(param.get("Initial concentration of lithium in electrolyte [mol.m-3]", 1000))
     plating["t_plus"] = float(param.get("Lithium transference number", 0.3))
     brug_n = param["Negative electrode Bruggeman coefficient (electrolyte)"]
-    por_n = param["Negative electrode active material volume fraction"]
+    por_n = param["Negative electrode porosity"]
     brug_s = param["Separator Bruggeman coefficient (electrolyte)"]
     por_s = param["Separator porosity"]
     plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_n ** brug_n)
     plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_s ** brug_s)
     plating["L_s"] = float(param["Separator thickness [m]"])
-    plating["m_ref"] = 1e-5
+    plating["m_ref"] = 6.48e-7  # From Okane2022
+    plating["V_Li"] = float(param["Lithium metal partial molar volume [m3.mol-1]"])
 
     # ---------------- Battery model ----------------
     x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(param)
