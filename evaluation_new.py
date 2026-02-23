@@ -4,7 +4,7 @@ import copy
 
 from main import scipy_rk23_integrate
 from utils.param_to_inputvars import load_params
-from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile
+from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile, Rest
 from utils.characterize import *
 from utils.pybamm_submodels import *
 
@@ -58,39 +58,29 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 1
-    initial_soc = 1.
+    tot_cycles = 100
+    initial_soc = 0.8
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
     param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
     param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
+    param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 10
+    param["EC diffusivity [m2.s-1]"] /= 150
     param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
     param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
 
-    cycle = np.loadtxt("./Dynamic_Profiles/WLTC.txt", skiprows=1)
-    cycle[:, 0] -= 1
-    cycle[:, 1] *= -1
-    # drive_step = pybamm.step.BaseStep(cycle, termination="Voltage < 2.5V")
-
-    drive_step = pybamm.step.current(cycle, termination="<2.5V", duration=1800000)
-
     experiment_baseline = pybamm.Experiment(
         [(
-            "Charge at 1.5 A until 3.5 V",
-            "Charge at 1 A until 4.2 V",
-            "Hold at 4.2 V until 0.2 A",
-            "Discharge at 1 A until 3 V",)
+            "Rest for 24 hours",)
         ] * tot_cycles
     )
-    experiment_baseline = drive_step
 
     # experiment_baseline = pybamm.Experiment(
     #         [(
@@ -100,7 +90,7 @@ if __name__ == "__main__":
     #         ] * tot_cycles
     #     )
 
-    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
+    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"}, build=False)
 
     # model.submodels["Negative active material"] = StressBasedLAM(
     #     model.param, "Negative"
@@ -132,10 +122,11 @@ if __name__ == "__main__":
     L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
     eps_n_bs = sol_baseline["X-averaged negative electrode active material volume fraction"].entries
     eps_p_bs = sol_baseline["X-averaged positive electrode active material volume fraction"].entries
+    L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
 
 
-    input_vars = load_params("input/M50_okane_modified.yaml")
-    input_vars["D_ec"] /= 10
+    input_vars = load_params("input/M50_okane_modified_plating.yaml")
+    input_vars["D_ec"] /= 150
     input_vars["Beta_n"] *= 200
     input_vars["Beta_p"] /= 100
 
@@ -147,16 +138,7 @@ if __name__ == "__main__":
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     steps = [
-        CCStep(I=1.5, V_end=3.5),
-        CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-        CCStep(I=-1, V_end=3.)
-    ]
-    # steps = [
-    #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-    #     DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
-    # ]
-    steps = [
-        DynamicProfile(V_lim=[2.5, 5.], cycle=True, dir="./Dynamic_Profiles/WLTC.txt")
+        Rest(t=24.),
     ]
     from copy import deepcopy as copy
     cycl = Cycler(
@@ -179,8 +161,8 @@ if __name__ == "__main__":
         input_vars=input_vars,
         tot_cycles=tot_cycles,
         cycler=cycl,
-        rtol=[1e-3, 1e-3, 1e-3],
-        atol=[1e-9 ,1e-4, 1e-4],
+        rtol=[1e-3, 1e-3, 1e-3, 1e-3],
+        atol=[1e-9 ,1e-4, 1e-4, 1e-9],
         stop_condition_fn=None,  # optional early-stop
         max_step=None
     )
@@ -188,12 +170,12 @@ if __name__ == "__main__":
     print("ODE + integration time: ", ode_time)
 
     #t_ode = [h[0] for h in history]
-    t_ode = history["n_cycles"]
+    t_ode = history["t [s]"] / 3600.
     L_ode = history["y"][:, 0]
     eps_n_ode = history["y"][:, 1]
     eps_p_ode = history["y"][:, 2]
+    plating = history["y"][:, 3]
     t_final_evol = history["times"]
-    LLI = history["LLI"]
     Q_ode = history["Q"]
 
     # L_bs = []
@@ -214,7 +196,7 @@ if __name__ == "__main__":
         #t_baseline.append(s["Time [h]"].entries[0])
 
     # t_baseline = np.arange(len(eps_p_bs))
-    t_baseline = np.asarray(t_bs) / t_bs[-1]
+    t_baseline = np.asarray(t_bs) #/ t_bs[-1] * 1000.
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
@@ -241,18 +223,17 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    # Plot LLI_sei
-    fig, ax = plt.subplots()
-    ax.plot(t_baseline, LLI_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode), LLI, label="ODE", color="red")
-    ax.legend()
-    ax.set_xlabel("cycles")
-    plt.show()
-
     # Plot Q
     fig, ax = plt.subplots()
     ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
     ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
+    ax.legend()
+    ax.set_xlabel("cycles")
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
+    ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
     ax.legend()
     ax.set_xlabel("cycles")
     plt.show()
