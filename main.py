@@ -14,7 +14,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
     Returns list of (t, y_vec, full_cycle_solution)
     """
 
-    # Wrapper converting SciPy call signature f(t,y) → dy/dt
+    # Wrapper converting SciPy call signature
     def rhs(t, y):
         dy = get_dif(y, t, cycler, input_vars=input_vars)
         # store last computed cycle
@@ -30,7 +30,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
     n_cycles = 0.
     Q0 = cycler.Q
     Q = cycler.Q
-    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "Q": [], "R": [], "soc": []}
+    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "Q": [], "R": [], "soc": [], "stoichiometry": []}
     history["t [s]"].append(0.)
     history["n_cycles"].append(n_cycles)
     history["y"].append(y0_vec)
@@ -38,6 +38,7 @@ def scipy_rk23_integrate(y0_vec, input_vars,
     history["Q"].append(Q0)
     history["R"].append(cycler.R)
     history["soc"].append(cycler.soc0)
+    history["stoichiometry"].append([input_vars["x_0"], input_vars["x_100"], input_vars["y_0"], input_vars["y_100"]])
 
     #history = [(0.0, n_cycles, y0_vec, cycler.times, 0, Q0, cycler.R, cycler.soc0)]
 
@@ -64,6 +65,8 @@ def scipy_rk23_integrate(y0_vec, input_vars,
             history["Q"].append(Q)
             history["R"].append(R)
             history["soc"].append(cycler.soc[-1])
+            history["stoichiometry"].append(
+                (input_vars["x_0"], input_vars["x_100"], input_vars["y_0"], input_vars["y_100"]))
             #history.append((t, n_cycles, y, cycler.times, LLI, Q, R, cycler.soc[-1]))
         except:
             print("Q_min reached")

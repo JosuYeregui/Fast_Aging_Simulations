@@ -1,14 +1,17 @@
 import numpy as np
 from utils.characterize import get_Q, get_Qn, stoichiometric_window
+import copy
 
 def get_dif(y, t, cycler, input_vars):
 
     L0 = y[0]
 
-    L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
-    dLdt = (L - L0)
+    # L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
+    # dLdt = (L - L0)
     # L = piecewise_integration_LSEI(L0, cycler, input_vars)
     # dLdt = (L - L0) / cycler.total_time
+    L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
+    dLdt = (L - L0) / cycler.total_time
 
     deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
 
@@ -77,6 +80,51 @@ def tfunc_integration_LSEI(L0, t, cycler, input_vars):
     # Normal small-step exact update with local k
     k_mid = 0.5 * (k_exp_t(soc) + k_exp_t(soc_dt))
     L= (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L0 + 0.5*k_mid*L0**2 + A_ec*D_ec*k_mid*dt))) / k_mid
+    return L
+
+def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
+    """
+    Integration for dL/dt = A*D*k/(D + k*L)
+    on a single time step.
+    """
+    k_exp_t = input_vars["k_exp"]
+    D_ec = input_vars["D_ec"]
+    A_ec = input_vars["A_ec"]
+
+    t = np.linspace(0, cycler.total_time, 1000)
+    dt = np.diff(t)[0]
+
+    sol_n = input_vars["cini_n"] / input_vars["csmax_n"]
+
+    L = L0
+
+    for t_ in t:
+        _, soc = cycler(t_ / 3600.)
+
+        Qn = get_Qn(input_vars, eps_n)
+        F = 96485.33
+        A = input_vars["A"]
+        a_s = eps_n * 3 / input_vars["R_n"]
+        Ln = input_vars["L_n"]
+        LLI_SEI_stress = (L - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * Ln
+
+        L0 = copy.deepcopy(L)
+
+        LLI = LLI_SEI_stress  # + LLI_pl
+
+        # Update parameters
+        sol_n -= LLI / Qn
+        #sol_n = input_vars["cini_n"] / input_vars["csmax_n"] - LLI / Qn
+        soc_n = (sol_n - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
+
+        eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
+        k_mid = np.exp(
+            -input_vars["alpha"] * input_vars["F"] * eta /
+            (input_vars["R"] * input_vars["T"])
+        ) * input_vars["k_sei"]
+        L = (-D_ec + np.sqrt(
+            D_ec ** 2 + 2 * k_mid * (D_ec * L0 + 0.5 * k_mid * L0 ** 2 + A_ec * D_ec * k_mid * dt))) / k_mid
+
     return L
 
 

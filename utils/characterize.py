@@ -185,7 +185,7 @@ def updated_model_Q(y, input_vars, cycler, L0, L0_pl):
     LLI_SEI_stress = (y[0] - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * L
     LLI_pl = (y[3] - L0_pl) * A * F / (input_vars["V_Li"] * 3600.) * a_s * L
 
-    LLI = LLI_SEI_stress + LLI_pl
+    LLI = LLI_SEI_stress #+ LLI_pl
 
     # Update parameters
     input_vars["cini_n"] = input_vars["cini_n_0"] - LLI / Qn * input_vars["csmax_n"]

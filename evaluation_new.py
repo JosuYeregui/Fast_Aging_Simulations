@@ -33,14 +33,14 @@ def extract_stoich_from_sol(solution, idx, esoh_solver):
     return x_0, y_0, x_100, y_100
 
 def get_capacity_from_sol(solution, p, idx, esoh_solver):
-    x_0, _, x_100, _ = extract_stoich_from_sol(solution, idx, esoh_solver)
+    x_0, y_0, x_100, y_100 = extract_stoich_from_sol(solution, idx, esoh_solver)
     eps_n = solution["X-averaged negative electrode active material volume fraction"].entries[idx]
     L = p["Negative electrode thickness [m]"]
     A = p["Electrode height [m]"] * p["Electrode width [m]"]
     cs_max = p["Maximum concentration in negative electrode [mol.m-3]"]
     F = 96485.33
 
-    return eps_n * L * cs_max * F * A * (x_100 - x_0) / 3600
+    return eps_n * L * cs_max * F * A * (x_100 - x_0) / 3600, [x_0, y_0, x_100, y_100 ]
 
 def extract_y0_yend(sol):
     res = extract_y_from_solution(sol)
@@ -58,8 +58,8 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 100
-    initial_soc = 0.8
+    tot_cycles = 10
+    initial_soc = 0.1
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 150
+    param["EC diffusivity [m2.s-1]"] /= 1
     param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
     param["Upper voltage cut-off [V]"] = 4.2
@@ -90,7 +90,10 @@ if __name__ == "__main__":
     #         ] * tot_cycles
     #     )
 
-    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"}, build=False)
+    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
+    # model = pybamm.lithium_ion.SPMe(
+    #     options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"},
+    #     build=False)
 
     # model.submodels["Negative active material"] = StressBasedLAM(
     #     model.param, "Negative"
@@ -117,18 +120,29 @@ if __name__ == "__main__":
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
     #Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
     t_bs = sol_baseline["Time [h]"].entries
-    Q_bs = [get_capacity_from_sol(sol_baseline, param, idx, esoh_solver) for idx in range(len(t_bs))]
+    Q_bs = []
+    stoich_bs = []
+    for idx in range(len(t_bs)):
+        q, st = get_capacity_from_sol(sol_baseline, param, idx, esoh_solver)
+        Q_bs.append(q)
+        stoich_bs.append(st)
+
+    stoich_bs = np.array(stoich_bs)
+    Q_bs = np.array(Q_bs)
+    #Q_bs = [get_capacity_from_sol(sol_baseline, param, idx, esoh_solver) for idx in range(len(t_bs))]
     LLI_bs = sol_baseline["Loss of capacity to negative SEI [A.h]"].entries
     L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
     eps_n_bs = sol_baseline["X-averaged negative electrode active material volume fraction"].entries
     eps_p_bs = sol_baseline["X-averaged positive electrode active material volume fraction"].entries
-    L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
+    #L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
 
 
     input_vars = load_params("input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 150
+    input_vars["D_ec"] /= 1
+    #input_vars["k_sei"] /= 1000
     input_vars["Beta_n"] *= 200
     input_vars["Beta_p"] /= 100
+    # input_vars["U_sei"] = 0.4
 
     Q0 = input_vars["Q"]
     Q = copy.deepcopy(Q0)
@@ -177,6 +191,7 @@ if __name__ == "__main__":
     plating = history["y"][:, 3]
     t_final_evol = history["times"]
     Q_ode = history["Q"]
+    stoich = np.asarray(history["stoichiometry"])
 
     # L_bs = []
     # LLI_bs = []
@@ -231,9 +246,23 @@ if __name__ == "__main__":
     ax.set_xlabel("cycles")
     plt.show()
 
+    # fig, ax = plt.subplots()
+    # ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
+    # ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
+    # ax.legend()
+    # ax.set_xlabel("cycles")
+    # plt.show()
+
     fig, ax = plt.subplots()
-    ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
+    ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")
+    ax.plot(t_baseline, stoich_bs[:, 2], label="Baseline x100", color="cyan")
+    ax.scatter(np.asarray(t_ode), stoich[:, 0], label="ODE x0", color="blue")
+    ax.scatter(np.asarray(t_ode), stoich[:, 1], label="ODE x100", color="cyan")
+    ax.plot(t_baseline, stoich_bs[:, 1], label="Baseline y0", color="orange")
+    ax.plot(t_baseline, stoich_bs[:, 3], label="Baseline y100", color="red")
+    ax.scatter(np.asarray(t_ode), stoich[:, 2], label="ODE y0", color="orange")
+    ax.scatter(np.asarray(t_ode), stoich[:, 3], label="ODE y100", color="red")
     ax.legend()
     ax.set_xlabel("cycles")
+    ax.set_ylabel("Stoichiometry")
     plt.show()
