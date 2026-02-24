@@ -59,7 +59,7 @@ def extract_y_from_solution(sol):
 if __name__ == "__main__":
 
     tot_cycles = 10
-    initial_soc = 0.1
+    initial_soc = 0.8
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -83,10 +83,11 @@ if __name__ == "__main__":
     )
 
     # experiment_baseline = pybamm.Experiment(
-    #         [(
+    #         [
     #             "Charge at 1.5 A until 4 V",
     #             "Hold at 4 V until 0.2 A",
-    #             drive_step,)
+    #             "Rest for 1 hour",
+    #             "Discharge at 1.5 A until 2.5 V",
     #         ] * tot_cycles
     #     )
 
@@ -149,11 +150,14 @@ if __name__ == "__main__":
     R = input_vars["R_int"]
     OCV_fn = get_OVC_func(input_vars)
 
-    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
-
     steps = [
         Rest(t=24.),
     ]
+    # steps = [
+    #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    #     Rest(t=1.),
+    #     CCStep(I=-1.5, V_end=2.5),
+    # ]
     from copy import deepcopy as copy
     cycl = Cycler(
         steps=steps,
@@ -166,8 +170,12 @@ if __name__ == "__main__":
     soc_ave = cycl.get_soc_ave()
     sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
     input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
+    input_vars["cini_n"] = sol_n * input_vars["csmax_n"]
     sol_p = soc_ave * (input_vars["y_100"] - input_vars["y_0"]) + input_vars["y_0"]
     input_vars["cini_p_0"] = sol_p * input_vars["csmax_p"]
+    input_vars["cini_p"] = sol_p * input_vars["csmax_p"]
+
+    y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     start_ode_time = time.time()
     history = scipy_rk23_integrate(

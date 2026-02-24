@@ -6,8 +6,10 @@ def set_c_ini(cycler, input_vars):
     soc_ave = cycler.get_soc_ave()
     sol_n = soc_ave * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
     input_vars["cini_n_0"] = sol_n * input_vars["csmax_n"]
+    input_vars["cini_n"] = sol_n * input_vars["csmax_n"]
     sol_p = soc_ave * (input_vars["y_100"] - input_vars["y_0"]) + input_vars["y_0"]
     input_vars["cini_p_0"] = sol_p * input_vars["csmax_p"]
+    input_vars["cini_p"] = sol_p * input_vars["csmax_p"]
 
     return input_vars
 

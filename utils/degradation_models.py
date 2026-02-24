@@ -6,12 +6,12 @@ def get_dif(y, t, cycler, input_vars):
 
     L0 = y[0]
 
-    # L = tfunc_integration_LSEI(L0, t, cycler, input_vars)
-    # dLdt = (L - L0)
-    # L = piecewise_integration_LSEI(L0, cycler, input_vars)
-    # dLdt = (L - L0) / cycler.total_time
-    L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
-    dLdt = (L - L0) / cycler.total_time
+    L = tfunc_integration_LSEI(L0, y[1], t, cycler, input_vars)
+    dLdt = (L - L0)
+    #L = piecewise_integration_LSEI(L0, cycler, input_vars)
+    #dLdt2 = (L - L0) / cycler.total_time
+    # L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
+    # dLdt = (L - L0) / (cycler.total_time)
 
     deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
 
@@ -63,12 +63,23 @@ def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
     return np.sum(deps_dt * t_steps) / np.sum(t_steps)
 
 
-def tfunc_integration_LSEI(L0, t, cycler, input_vars):
+def tfunc_integration_LSEI(L0, eps_n, t, cycler, input_vars):
     """
     Integration for dL/dt = A*D*k/(D + k*L)
     on a single time step.
     """
-    k_exp_t = input_vars["k_exp"]
+
+    def k_exp(soc): # TODO: Sieso sartukoziou csurf-ekiko cave beharrean
+        x_0 = input_vars["x_0"]
+        x_100 = input_vars["x_100"]
+        sol_n = soc * (x_100 - x_0) + x_0
+        eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
+        return np.exp(
+            -input_vars["alpha"] * input_vars["F"] * eta /
+            (input_vars["R"] * input_vars["T"])
+        ) * input_vars["k_sei"]
+
+    k_exp_t = k_exp
     D_ec = input_vars["D_ec"]
     A_ec = input_vars["A_ec"]
 
@@ -77,10 +88,21 @@ def tfunc_integration_LSEI(L0, t, cycler, input_vars):
     _, soc = cycler(t/3600.)
     _, soc_dt = cycler((t + dt)/3600.)
 
+    Qn = get_Qn(input_vars, eps_n)
+    F = 96485.33
+    A = input_vars["A"]
+    a_s = eps_n * 3 / input_vars["R_n"]
+    Ln = input_vars["L_n"]
+    LLI_SEI_stress = (L0 - input_vars["L_0"]) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * Ln
+
+    soc_comp = LLI_SEI_stress/Qn
+    #soc_comp = (sol_comp - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
+
     # Normal small-step exact update with local k
-    k_mid = 0.5 * (k_exp_t(soc) + k_exp_t(soc_dt))
-    L= (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L0 + 0.5*k_mid*L0**2 + A_ec*D_ec*k_mid*dt))) / k_mid
+    k_mid = 0.5 * (k_exp_t(soc - soc_comp) + k_exp_t(soc_dt - soc_comp))
+    L = (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L0 + 0.5*k_mid*L0**2 + A_ec*D_ec*k_mid*dt))) / k_mid
     return L
+
 
 def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
     """
@@ -92,7 +114,7 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
     A_ec = input_vars["A_ec"]
 
     t = np.linspace(0, cycler.total_time, 1000)
-    dt = np.diff(t)[0]
+    dt = cycler.total_time / 1000.
 
     sol_n = input_vars["cini_n"] / input_vars["csmax_n"]
 
