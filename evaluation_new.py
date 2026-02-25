@@ -58,8 +58,8 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 10
-    initial_soc = 0.8
+    tot_cycles = 1000
+    initial_soc = 1.
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 1
+    param["EC diffusivity [m2.s-1]"] /= 100
     param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
     param["Upper voltage cut-off [V]"] = 4.2
@@ -82,14 +82,15 @@ if __name__ == "__main__":
         ] * tot_cycles
     )
 
-    # experiment_baseline = pybamm.Experiment(
-    #         [
-    #             "Charge at 1.5 A until 4 V",
-    #             "Hold at 4 V until 0.2 A",
-    #             "Rest for 1 hour",
-    #             "Discharge at 1.5 A until 2.5 V",
-    #         ] * tot_cycles
-    #     )
+    experiment_baseline = pybamm.Experiment(
+            [
+                "Discharge at 1.5 A until 2.8 V",
+                "Rest for 24 hour",
+                "Charge at 1.5 A until 4.2 V",
+                "Hold at 4.2 V until 0.2 A",
+
+            ] * tot_cycles
+        )
 
     model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
     # model = pybamm.lithium_ion.SPMe(
@@ -121,15 +122,17 @@ if __name__ == "__main__":
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
     #Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
     t_bs = sol_baseline["Time [h]"].entries
-    Q_bs = []
-    stoich_bs = []
-    for idx in range(len(t_bs)):
-        q, st = get_capacity_from_sol(sol_baseline, param, idx, esoh_solver)
-        Q_bs.append(q)
-        stoich_bs.append(st)
 
-    stoich_bs = np.array(stoich_bs)
-    Q_bs = np.array(Q_bs)
+    # Q_bs = []
+    # stoich_bs = []
+    # for idx in range(len(t_bs)):
+    #     q, st = get_capacity_from_sol(sol_baseline, param, idx, esoh_solver)
+    #     Q_bs.append(q)
+    #     stoich_bs.append(st)
+    #
+    # stoich_bs = np.array(stoich_bs)
+    # Q_bs = np.array(Q_bs)
+
     #Q_bs = [get_capacity_from_sol(sol_baseline, param, idx, esoh_solver) for idx in range(len(t_bs))]
     LLI_bs = sol_baseline["Loss of capacity to negative SEI [A.h]"].entries
     L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
@@ -139,7 +142,7 @@ if __name__ == "__main__":
 
 
     input_vars = load_params("input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 1
+    input_vars["D_ec"] /= 100
     #input_vars["k_sei"] /= 1000
     input_vars["Beta_n"] *= 200
     input_vars["Beta_p"] /= 100
@@ -153,11 +156,11 @@ if __name__ == "__main__":
     steps = [
         Rest(t=24.),
     ]
-    # steps = [
-    #     CCCVStep(I=1.5, V_end=4., Cutoff_I=0.2, Vlim=[2.5, 4.2]),
-    #     Rest(t=1.),
-    #     CCStep(I=-1.5, V_end=2.5),
-    # ]
+    steps = [
+        CCStep(I=-1.5, V_end=2.8),
+        Rest(t=24.),
+        CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    ]
     from copy import deepcopy as copy
     cycl = Cycler(
         steps=steps,
@@ -247,30 +250,30 @@ if __name__ == "__main__":
     plt.show()
 
     # Plot Q
-    fig, ax = plt.subplots()
-    ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
-    ax.legend()
-    ax.set_xlabel("cycles")
-    plt.show()
-
     # fig, ax = plt.subplots()
-    # ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
-    # ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
+    # ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
+    # ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
     # ax.legend()
     # ax.set_xlabel("cycles")
     # plt.show()
-
-    fig, ax = plt.subplots()
-    ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")
-    ax.plot(t_baseline, stoich_bs[:, 2], label="Baseline x100", color="cyan")
-    ax.scatter(np.asarray(t_ode), stoich[:, 0], label="ODE x0", color="blue")
-    ax.scatter(np.asarray(t_ode), stoich[:, 1], label="ODE x100", color="cyan")
-    ax.plot(t_baseline, stoich_bs[:, 1], label="Baseline y0", color="orange")
-    ax.plot(t_baseline, stoich_bs[:, 3], label="Baseline y100", color="red")
-    ax.scatter(np.asarray(t_ode), stoich[:, 2], label="ODE y0", color="orange")
-    ax.scatter(np.asarray(t_ode), stoich[:, 3], label="ODE y100", color="red")
-    ax.legend()
-    ax.set_xlabel("cycles")
-    ax.set_ylabel("Stoichiometry")
-    plt.show()
+    #
+    # # fig, ax = plt.subplots()
+    # # ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
+    # # ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
+    # # ax.legend()
+    # # ax.set_xlabel("cycles")
+    # # plt.show()
+    #
+    # fig, ax = plt.subplots()
+    # ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")
+    # ax.plot(t_baseline, stoich_bs[:, 2], label="Baseline x100", color="cyan")
+    # ax.scatter(np.asarray(t_ode), stoich[:, 0], label="ODE x0", color="blue")
+    # ax.scatter(np.asarray(t_ode), stoich[:, 1], label="ODE x100", color="cyan")
+    # ax.plot(t_baseline, stoich_bs[:, 1], label="Baseline y0", color="orange")
+    # ax.plot(t_baseline, stoich_bs[:, 3], label="Baseline y100", color="red")
+    # ax.scatter(np.asarray(t_ode), stoich[:, 2], label="ODE y0", color="orange")
+    # ax.scatter(np.asarray(t_ode), stoich[:, 3], label="ODE y100", color="red")
+    # ax.legend()
+    # ax.set_xlabel("cycles")
+    # ax.set_ylabel("Stoichiometry")
+    # plt.show()

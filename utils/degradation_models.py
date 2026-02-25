@@ -6,12 +6,12 @@ def get_dif(y, t, cycler, input_vars):
 
     L0 = y[0]
 
-    L = tfunc_integration_LSEI(L0, y[1], t, cycler, input_vars)
-    dLdt = (L - L0)
+    #L = tfunc_integration_LSEI(L0, y[1], t, cycler, input_vars)
+    #dLdt = (L - L0)
     #L = piecewise_integration_LSEI(L0, cycler, input_vars)
     #dLdt2 = (L - L0) / cycler.total_time
-    # L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
-    # dLdt = (L - L0) / (cycler.total_time)
+    L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
+    dLdt = (L - L0) / (cycler.total_time)
 
     deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
 
@@ -22,6 +22,26 @@ def get_dif(y, t, cycler, input_vars):
     dPl_dt = L_Pl
 
     return [dLdt, deps_dt_n, deps_dt_p, dPl_dt]
+
+def get_t_and_dt(cycler):
+    times = np.array(cycler.times)
+
+    points_per_step = 10
+    t_segments = []
+
+    for i in range(len(times) - 1):
+        start_time = times[i]
+        end_time = times[i + 1]
+        is_last_step = (i == len(times) - 2)
+        step_t = np.linspace(start_time, end_time, points_per_step, endpoint=is_last_step)
+        t_segments.append(step_t)
+
+    t = np.concatenate(t_segments)
+
+    dt_array = np.diff(t)
+    dt_array = np.append(dt_array, dt_array[-1])
+
+    return t, dt_array
 
 
 def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
@@ -99,7 +119,7 @@ def tfunc_integration_LSEI(L0, eps_n, t, cycler, input_vars):
     #soc_comp = (sol_comp - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
 
     # Normal small-step exact update with local k
-    k_mid = 0.5 * (k_exp_t(soc - soc_comp) + k_exp_t(soc_dt - soc_comp))
+    k_mid = 0.5 * (k_exp_t(max(soc - soc_comp, 0.)) + k_exp_t(max(soc_dt - soc_comp, 0.)))
     L = (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L0 + 0.5*k_mid*L0**2 + A_ec*D_ec*k_mid*dt))) / k_mid
     return L
 
@@ -109,35 +129,47 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
     Integration for dL/dt = A*D*k/(D + k*L)
     on a single time step.
     """
-    k_exp_t = input_vars["k_exp"]
     D_ec = input_vars["D_ec"]
     A_ec = input_vars["A_ec"]
 
-    t = np.linspace(0, cycler.total_time, 1000)
-    dt = cycler.total_time / 1000.
+    # t = np.linspace(0, cycler.total_time, 1000)
+    # dt = cycler.total_time / 1000.
 
-    sol_n = input_vars["cini_n"] / input_vars["csmax_n"]
+    t, dt_array = get_t_and_dt(cycler)
+
+    Qn = get_Qn(input_vars, eps_n)
+    F = 96485.33
+    A = input_vars["A"]
+    a_s = eps_n * 3 / input_vars["R_n"]
+    Ln = input_vars["L_n"]
+
+    #sol_n = input_vars["cini_n"] / input_vars["csmax_n"]
 
     L = L0
 
+    soc_vec = []
+    _, soc = cycler(0.)
+    soc_prev = soc
+    soc_chg = 0.
+
     for t_ in t:
-        _, soc = cycler(t_ / 3600.)
+        _, soc = cycler(t_)
+        soc_vec.append(soc)
+        soc_dif = soc - soc_prev
+        soc_prev = soc
+        soc_chg += max(soc_dif, 0)
 
-        Qn = get_Qn(input_vars, eps_n)
-        F = 96485.33
-        A = input_vars["A"]
-        a_s = eps_n * 3 / input_vars["R_n"]
-        Ln = input_vars["L_n"]
-        LLI_SEI_stress = (L - L0) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * Ln
+    for t_, soc, dt in zip(t, soc_vec, dt_array):
 
-        L0 = copy.deepcopy(L)
+        LLI_SEI_stress = (L - input_vars["L_0"]) * A * F / (input_vars["V_SEI"] * 3600.) * input_vars["z_SEI"] * a_s * Ln
 
         LLI = LLI_SEI_stress  # + LLI_pl
 
         # Update parameters
-        sol_n -= LLI / Qn
+        soc_comp = max(LLI / Qn - soc_chg, 0) # 5.827614940463554
         #sol_n = input_vars["cini_n"] / input_vars["csmax_n"] - LLI / Qn
-        soc_n = (sol_n - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
+        #soc_n = (sol_n - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
+        sol_n = max(soc-soc_comp, 0) * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
 
         eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
         k_mid = np.exp(
@@ -145,7 +177,7 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
             (input_vars["R"] * input_vars["T"])
         ) * input_vars["k_sei"]
         L = (-D_ec + np.sqrt(
-            D_ec ** 2 + 2 * k_mid * (D_ec * L0 + 0.5 * k_mid * L0 ** 2 + A_ec * D_ec * k_mid * dt))) / k_mid
+            D_ec ** 2 + 2 * k_mid * (D_ec * L + 0.5 * k_mid * L ** 2 + A_ec * D_ec * k_mid * dt))) / k_mid
 
     return L
 
@@ -159,14 +191,14 @@ def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5
     D_ec = input_vars["D_ec"]
     A_ec = input_vars["A_ec"]
 
-    t = np.linspace(0, cycler.total_time, 1000)
+    #t = np.linspace(0, cycler.total_time, 1000)
+    #dt = np.diff(t)
+    t, dt = get_t_and_dt(cycler)
 
     k_exp_t = []
     for t_ in t:
         _, soc_ = cycler(t_)
         k_exp_t.append(k_exp_fn(soc_))
-
-    dt = np.diff(t)
 
     # Compute relative slope of k_exp_t to detect flat regions ("plateaus")
     dk = np.gradient(k_exp_t, t,)
@@ -260,7 +292,8 @@ def piecewise_integration_Plating(y, cycler, input_vars, slope_tol=1e-15, min_le
     3. Integrates fast over plateaus and step-by-step over transients.
     """
 
-    t = np.linspace(0, cycler.total_time, 1000)
+    #t = np.linspace(0, cycler.total_time, 1000)
+    t, _ = get_t_and_dt(cycler)
 
     I_t = []
     soc_t = []
