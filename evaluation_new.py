@@ -2,7 +2,7 @@ import time
 from matplotlib import pyplot as plt
 import copy
 
-from main import scipy_rk23_integrate
+from main import FastAging_Simulation
 from utils.param_to_inputvars import load_params
 from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile, Rest
 from utils.characterize import *
@@ -58,7 +58,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 1000
+    tot_cycles = 50
     initial_soc = 1.
 
     param_chen = pybamm.ParameterValues("Chen2020")
@@ -92,10 +92,10 @@ if __name__ == "__main__":
             ] * tot_cycles
         )
 
-    model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
-    # model = pybamm.lithium_ion.SPMe(
-    #     options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"},
-    #     build=False)
+    # model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
+    model = pybamm.lithium_ion.SPMe(
+        options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"},
+        build=False)
 
     # model.submodels["Negative active material"] = StressBasedLAM(
     #     model.param, "Negative"
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
     eps_n_bs = sol_baseline["X-averaged negative electrode active material volume fraction"].entries
     eps_p_bs = sol_baseline["X-averaged positive electrode active material volume fraction"].entries
-    #L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
+    L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
 
 
     input_vars = load_params("input/M50_okane_modified_plating.yaml")
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     start_ode_time = time.time()
-    history = scipy_rk23_integrate(
+    history = FastAging_Simulation(
         y0_vec=y0_vec,
         input_vars=input_vars,
         tot_cycles=tot_cycles,
@@ -196,6 +196,7 @@ if __name__ == "__main__":
 
     #t_ode = [h[0] for h in history]
     t_ode = history["t [s]"] / 3600.
+    #t_ode = history["n_cycles"]
     L_ode = history["y"][:, 0]
     eps_n_ode = history["y"][:, 1]
     eps_p_ode = history["y"][:, 2]
@@ -222,7 +223,7 @@ if __name__ == "__main__":
         #t_baseline.append(s["Time [h]"].entries[0])
 
     # t_baseline = np.arange(len(eps_p_bs))
-    t_baseline = np.asarray(t_bs) #/ t_bs[-1] * 1000.
+    t_baseline = np.asarray(t_bs) #/ t_bs[-1] * tot_cycles
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
@@ -250,19 +251,19 @@ if __name__ == "__main__":
     plt.show()
 
     # Plot Q
-    # fig, ax = plt.subplots()
+    fig, ax = plt.subplots()
     # ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
-    # ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
-    # ax.legend()
-    # ax.set_xlabel("cycles")
-    # plt.show()
+    ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
+    ax.legend()
+    ax.set_xlabel("cycles")
+    plt.show()
     #
-    # # fig, ax = plt.subplots()
-    # # ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
-    # # ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
-    # # ax.legend()
-    # # ax.set_xlabel("cycles")
-    # # plt.show()
+    fig, ax = plt.subplots()
+    ax.plot(t_baseline, L_sei, label="Baseline", color="blue")
+    ax.scatter(np.asarray(t_ode), plating, label="ODE", color="red")
+    ax.legend()
+    ax.set_xlabel("cycles")
+    plt.show()
     #
     # fig, ax = plt.subplots()
     # ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")

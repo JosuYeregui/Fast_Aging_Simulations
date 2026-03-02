@@ -1,6 +1,5 @@
 import numpy as np
 from utils.characterize import get_Q, get_Qn, stoichiometric_window
-import copy
 
 def get_dif(y, t, cycler, input_vars):
 
