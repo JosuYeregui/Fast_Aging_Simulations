@@ -58,7 +58,7 @@ def extract_y_from_solution(sol):
 
 if __name__ == "__main__":
 
-    tot_cycles = 50
+    tot_cycles = 1000
     initial_soc = 1.
 
     param_chen = pybamm.ParameterValues("Chen2020")
@@ -69,9 +69,10 @@ if __name__ == "__main__":
     param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    param["EC diffusivity [m2.s-1]"] /= 100
-    param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
-    param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
+    param["EC diffusivity [m2.s-1]"] /= 150
+    param["Positive electrode LAM constant proportional term [s-1]"] /= 2000.
+    param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
+    param["Lithium plating kinetic rate constant [m.s-1]"] /= 100.
     param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
@@ -83,18 +84,32 @@ if __name__ == "__main__":
     )
 
     experiment_baseline = pybamm.Experiment(
-            [
-                "Discharge at 1.5 A until 2.8 V",
-                "Rest for 24 hour",
-                "Charge at 1.5 A until 4.2 V",
-                "Hold at 4.2 V until 0.2 A",
+        [
+            "Discharge at 1.5 A until 2.8 V",
+            "Rest for 24 hour",
+            "Charge at 1.5 A until 4.2 V",
+            "Hold at 4.2 V until 0.2 A",
 
-            ] * tot_cycles
-        )
+        ] * tot_cycles
+    )
+
+    experiment_baseline = pybamm.Experiment(
+        [("Discharge at 1.5C until 3 V", "Rest for 1 hour", "Charge at 0.3C until 4.2 V",
+          "Hold at 4.2V until C/50")] * tot_cycles)  # Sulzerren test-a
+
+    # experiment_baseline = pybamm.Experiment(
+    #     [(
+    #         "Charge at 1.5 A until 3.5 V",
+    #         "Charge at 1 A until 4.2 V",
+    #         "Hold at 4.2 V until 0.2 A",
+    #         "Rest for 1 hour",
+    #         "Discharge at 1 A until 3 V",)
+    #     ] * tot_cycles
+    # )
 
     # model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, build=False)
     model = pybamm.lithium_ion.SPMe(
-        options={"SEI": "ec reaction limited", "x-average side reactions": "false", "lithium plating": "irreversible"},
+        options={"SEI": "ec reaction limited", "x-average side reactions": "false"}, # "lithium plating": "irreversible"
         build=False)
 
     # model.submodels["Negative active material"] = StressBasedLAM(
@@ -106,6 +121,8 @@ if __name__ == "__main__":
     # model.submodels["Positive active material"] = StressBasedLAM(
     #     model.param, "Positive"
     # )
+
+    model.submodels["Plating"] = Plating_FP(model.param, "negative", x_average=True, options={"lithium plating": "irreversible"})
 
     model.submodels["Positive active material"] = StressBasedLAM_FP(model.param, "Positive", options={"loss of active material": "stress-driven"}, x_average=True, phase="primary")
 
@@ -120,8 +137,11 @@ if __name__ == "__main__":
     print("Baseline simulation time: ", end_time - start_time)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
-    #Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver) for s in sol_baseline.cycles]
-    t_bs = sol_baseline["Time [h]"].entries
+    Q_bs = [get_capacity_from_sol(s, param, 0, esoh_solver)[0] for s in sol_baseline.cycles]
+    stoich_bs = np.asarray([get_capacity_from_sol(s, param, 0, esoh_solver)[1] for s in sol_baseline.cycles])
+    t_bs = [s["Time [h]"].entries[0] for s in sol_baseline.cycles]
+    #t_bs = sol_baseline["Time [h]"].entries
+    #t_bs = np.arange(len(t_bs))
 
     # Q_bs = []
     # stoich_bs = []
@@ -134,18 +154,26 @@ if __name__ == "__main__":
     # Q_bs = np.array(Q_bs)
 
     #Q_bs = [get_capacity_from_sol(sol_baseline, param, idx, esoh_solver) for idx in range(len(t_bs))]
-    LLI_bs = sol_baseline["Loss of capacity to negative SEI [A.h]"].entries
-    L_bs = sol_baseline["X-averaged negative SEI thickness [m]"].entries
-    eps_n_bs = sol_baseline["X-averaged negative electrode active material volume fraction"].entries
-    eps_p_bs = sol_baseline["X-averaged positive electrode active material volume fraction"].entries
-    L_sei = sol_baseline["X-averaged negative dead lithium thickness [m]"].entries
+    LLI_bs = [s["Loss of capacity to negative SEI [A.h]"].entries[0] for s in sol_baseline.cycles]
+    L_bs = [s["X-averaged negative SEI thickness [m]"].entries[0] for s in sol_baseline.cycles]
+    eps_n_bs = [s["X-averaged negative electrode active material volume fraction"].entries[0] for s in sol_baseline.cycles]
+    eps_p_bs = [s["X-averaged positive electrode active material volume fraction"].entries[0] for s in sol_baseline.cycles]
+    L_sei = [s["X-averaged negative dead lithium thickness [m]"].entries[0] for s in sol_baseline.cycles]
+    t_times = [s["Time [h]"].entries[-1] - s["Time [h]"].entries[0] for s in sol_baseline.cycles]
+
+    c_s = sol_baseline[f"X-averaged negative particle surface concentration [mol.m-3]"].entries
+    # c_avg = pybamm.x_average(variables[f"R-averaged {domain} {phase_name}particle concentration [mol.m-3]"])
+    c_avg = sol_baseline[f"Average negative particle concentration [mol.m-3]"].entries
 
 
     input_vars = load_params("input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 100
+    input_vars["D_ec"] /= 150
     #input_vars["k_sei"] /= 1000
-    input_vars["Beta_n"] *= 200
-    input_vars["Beta_p"] /= 100
+    input_vars["Beta_n"] *= 20
+    input_vars["Beta_p"] /= 2000
+    input_vars["k_plating"] /= 100
+    input_vars["D_n"] *= 1
+
     # input_vars["U_sei"] = 0.4
 
     Q0 = input_vars["Q"]
@@ -161,7 +189,21 @@ if __name__ == "__main__":
         Rest(t=24.),
         CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
     ]
-    from copy import deepcopy as copy
+
+    steps = [
+        CCStep(I=-5*1.5, V_end=3),
+        Rest(t=1.),
+        #CCStep(I=5, V_end=4.2),
+        CCCVStep(I=5*0.3, V_end=4.2, Cutoff_I=5/50, Vlim=[2.5, 4.2]),
+    ]
+
+    # steps = [
+    #     CCStep(I=1.5, V_end=3.5),
+    #     CCCVStep(I=1, V_end=4.2, Cutoff_I=0.2, Vlim=[2.5, 4.2]),
+    #     Rest(t=1.),
+    #     CCStep(I=-1, V_end=3.)
+    # ]
+
     cycl = Cycler(
         steps=steps,
         SOC0=initial_soc,
@@ -186,7 +228,7 @@ if __name__ == "__main__":
         input_vars=input_vars,
         tot_cycles=tot_cycles,
         cycler=cycl,
-        rtol=[1e-3, 1e-3, 1e-3, 1e-3],
+        rtol=[1e-5, 1e-3, 1e-3, 1e-5],
         atol=[1e-9 ,1e-4, 1e-4, 1e-9],
         stop_condition_fn=None,  # optional early-stop
         max_step=None
@@ -196,7 +238,7 @@ if __name__ == "__main__":
 
     #t_ode = [h[0] for h in history]
     t_ode = history["t [s]"] / 3600.
-    #t_ode = history["n_cycles"]
+    t_ode = history["n_cycles"]
     L_ode = history["y"][:, 0]
     eps_n_ode = history["y"][:, 1]
     eps_p_ode = history["y"][:, 2]
@@ -223,7 +265,7 @@ if __name__ == "__main__":
         #t_baseline.append(s["Time [h]"].entries[0])
 
     # t_baseline = np.arange(len(eps_p_bs))
-    t_baseline = np.asarray(t_bs) #/ t_bs[-1] * tot_cycles
+    t_baseline = np.asarray(t_bs) / t_bs[-1] * tot_cycles
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, L_bs, label="Baseline")
@@ -238,21 +280,21 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     ax.plot(t_baseline, eps_n_bs, label="Baseline", color="blue")
-    ax.scatter(np.asarray(t_ode), eps_n_ode, label="\epsilon_n ODE",
+    ax.scatter(np.asarray(t_ode), eps_n_ode, label="epsilon_n ODE",
                c="blue")
     ax.plot(t_baseline, eps_p_bs, label="Baseline", color="orange")
-    ax.scatter(np.asarray(t_ode), eps_p_ode, label="\epsilon_p ODE",
+    ax.scatter(np.asarray(t_ode), eps_p_ode, label="epsilon_p ODE",
                c="orange")
     # ax.scatter(np.asarray(t_ode)*cycl.total_time, L_ode, label="ODE",
     #           c="red")
     ax.set_xlabel("cycles")
-    ax.set_ylabel("\epsilon")
+    ax.set_ylabel("epsilon")
     plt.legend()
     plt.show()
 
     # Plot Q
     fig, ax = plt.subplots()
-    # ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
+    ax.plot(t_baseline, Q_bs, label="Baseline", color="blue")
     ax.scatter(np.asarray(t_ode), Q_ode, label="ODE", color="red")
     ax.legend()
     ax.set_xlabel("cycles")
@@ -265,16 +307,29 @@ if __name__ == "__main__":
     ax.set_xlabel("cycles")
     plt.show()
     #
-    # fig, ax = plt.subplots()
-    # ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")
-    # ax.plot(t_baseline, stoich_bs[:, 2], label="Baseline x100", color="cyan")
-    # ax.scatter(np.asarray(t_ode), stoich[:, 0], label="ODE x0", color="blue")
-    # ax.scatter(np.asarray(t_ode), stoich[:, 1], label="ODE x100", color="cyan")
-    # ax.plot(t_baseline, stoich_bs[:, 1], label="Baseline y0", color="orange")
-    # ax.plot(t_baseline, stoich_bs[:, 3], label="Baseline y100", color="red")
-    # ax.scatter(np.asarray(t_ode), stoich[:, 2], label="ODE y0", color="orange")
-    # ax.scatter(np.asarray(t_ode), stoich[:, 3], label="ODE y100", color="red")
-    # ax.legend()
-    # ax.set_xlabel("cycles")
-    # ax.set_ylabel("Stoichiometry")
-    # plt.show()
+    fig, ax = plt.subplots()
+    ax.plot(t_baseline, stoich_bs[:, 0], label="Baseline x0", color="blue")
+    ax.plot(t_baseline, stoich_bs[:, 2], label="Baseline x100", color="cyan")
+    ax.scatter(np.asarray(t_ode), stoich[:, 0], label="ODE x0", color="blue")
+    ax.scatter(np.asarray(t_ode), stoich[:, 1], label="ODE x100", color="cyan")
+    ax.plot(t_baseline, stoich_bs[:, 1], label="Baseline y0", color="orange")
+    ax.plot(t_baseline, stoich_bs[:, 3], label="Baseline y100", color="red")
+    ax.scatter(np.asarray(t_ode), stoich[:, 2], label="ODE y0", color="orange")
+    ax.scatter(np.asarray(t_ode), stoich[:, 3], label="ODE y100", color="red")
+    ax.legend()
+    ax.set_xlabel("cycles")
+    ax.set_ylabel("Stoichiometry")
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.scatter(t_baseline, t_times)
+    ax.plot(np.asarray(t_ode), t_final_evol)
+    ax.legend()
+    ax.set_xlabel("cycles")
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(c_s - c_avg)
+    ax.legend()
+    ax.set_xlabel("cycles")
+    plt.show()

@@ -24,7 +24,7 @@ def _load_yaml(filename):
 
 # WRITE ALL PARAMETERS TO ONE YAML FILE
 
-def write_all_params_to_yaml(param, model, yaml_file):
+def write_all_params_to_yaml(param, model, U_fun_name, yaml_file):
     data = {
         "global": {},
         "model": {},
@@ -56,37 +56,39 @@ def write_all_params_to_yaml(param, model, yaml_file):
             "L": param[k + " electrode thickness [m]"],
             "csmax": param["Maximum concentration in " + k.lower() + " electrode [mol.m-3]"],
             "cini": param["Initial concentration in " + k.lower() + " electrode [mol.m-3]"],
-            "U": "Chen2020_U_"+d,
+            "U": U_fun_name+d,
             "eps_0": param[k + " electrode active material volume fraction"]
         }
 
     # ---------------- SEI ----------------
     sei = data["SEI"]
-    sei["k_sei"] = float(param.get("SEI kinetic rate constant [m.s-1]", 1e-12))
-    sei["D_ec"] = float(param.get("EC diffusivity [m2.s-1]", 2e-18))
-    sei["c_ec"] = float(param.get("EC initial concentration in electrolyte [mol.m-3]", 4541))
-    sei["alpha"] = float(param.get("SEI charge transfer coefficient", 0.5))
-    sei["U_sei"] = float(param.get("SEI open-circuit potential [V]", 0.4))
-    sei["R"] = float(param.get("Ideal gas constant [J.mol-1.K-1]", 8.314462618))
-    sei["T"] = float(param.get("Ambient temperature [K]", 298.15))
-    sei["V_SEI"] = float(param.get("SEI partial molar volume [m3.mol-1]", 9.585e-5))
-    sei["z_SEI"] = float(param.get("Ratio of lithium moles to SEI moles", 2.))
-    sei["L_0"] = float(param.get("initial sei thickness", 5e-9))
+    sei["k_sei"] = param["SEI kinetic rate constant [m.s-1]"]
+    sei["D_ec"] = param["EC diffusivity [m2.s-1]"]
+    sei["c_ec"] = param["EC initial concentration in electrolyte [mol.m-3]"]
+    sei["alpha"] = 0.5#param["SEI charge transfer coefficient"]
+    sei["U_sei"] = param["SEI open-circuit potential [V]"]
+    sei["R"] = 8.314462 # param["Ideal gas constant [J.mol-1.K-1]"]
+    sei["T"] = param["Ambient temperature [K]"]
+    sei["V_SEI"] = param["SEI partial molar volume [m3.mol-1]"]
+    sei["z_SEI"] = param["Ratio of lithium moles to SEI moles"]
+    sei["L_0"] = param["Initial SEI thickness [m]"]
     sei["rho_SEI"] = param["SEI resistivity [Ohm.m]"]
     sei["A_ec"] = sei["c_ec"] * sei["V_SEI"] / sei["z_SEI"]
 
     # ----------------- Plating ----------------
     plating = data["Plating"]
-    plating["k_plating"] = float(param.get("Lithium plating kinetic rate constant [m.s-1]", 1e-12))
-    plating["alpha_plating"] = float(param.get("Lithium plating transfer coefficient", 0.65))
-    plating["ce_0"] = float(param.get("Initial concentration of lithium in electrolyte [mol.m-3]", 1000))
-    plating["t_plus"] = float(param.get("Lithium transference number", 0.3))
+    plating["k_plating"] = param["Lithium plating kinetic rate constant [m.s-1]"]
+    plating["alpha_plating"] = param["Lithium plating transfer coefficient"]
+    plating["ce_0"] = param["Initial concentration in electrolyte [mol.m-3]"]# param["Initial concentration of lithium in electrolyte [mol.m-3]"]
+    plating["t_plus"] = param["Cation transference number"] # param["Lithium transference number"]
     brug_n = param["Negative electrode Bruggeman coefficient (electrolyte)"]
     por_n = param["Negative electrode porosity"]
     brug_s = param["Separator Bruggeman coefficient (electrolyte)"]
     por_s = param["Separator porosity"]
     plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_n ** brug_n)
     plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_s ** brug_s)
+    # plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"].value * por_n ** brug_n)
+    # plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"].value * por_s ** brug_s)
     plating["L_s"] = float(param["Separator thickness [m]"])
     plating["m_ref"] = 6.48e-7  # From Okane2022
     plating["V_Li"] = float(param["Lithium metal partial molar volume [m3.mol-1]"])
@@ -126,6 +128,15 @@ def Chen2020_U_n(sol):
 @register_function("Chen2020_U_p")
 def Chen2020_U_p(sol):
     return param_chen["Positive electrode OCP [V]"](sol)
+
+param_mohtat = pybamm.ParameterValues("Mohtat2020")
+@register_function("Mohtat2020_U_n")
+def Mohtat2020_U_n(sol):
+    return param_mohtat["Negative electrode OCP [V]"](sol)
+
+@register_function("Mohtat2020_U_p")
+def Mohtat2020_U_p(sol):
+    return param_mohtat["Positive electrode OCP [V]"](sol)
 
 # LOADERS
 
@@ -322,11 +333,11 @@ if __name__ == "__main__":
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
     # param["Ratio of lithium moles to SEI moles"] = 2.
 
-    #param["EC diffusivity [m2.s-1]"] /= 1000
+    # param["EC diffusivity [m2.s-1]"] /= 1000
     # param["Positive electrode LAM constant proportional term [s-1]"] /= 100.
     # param["Negative electrode LAM constant proportional term [s-1]"] *= 200.
-    #param["Positive electrode LAM constant proportional term [s-1]"] *= 5.
-    #param["Negative electrode LAM constant proportional term [s-1]"] *= 1000.
+    # param["Positive electrode LAM constant proportional term [s-1]"] *= 5.
+    # param["Negative electrode LAM constant proportional term [s-1]"] *= 1000.
     param["Upper voltage cut-off [V]"] = 4.2
 
     param = update_LAM_params(param)
@@ -339,10 +350,58 @@ if __name__ == "__main__":
         "loss of active material": "stress-driven"}, x_average=True, phase="primary")
     model.build_model()
 
-    write_all_params_to_yaml(param, model,"../input/M50_okane_modified_plating.yaml")
+    write_all_params_to_yaml(param, model, "Chen2020_U_", "../input/M50_okane_modified_plating.yaml")
 
     loaded_param = load_params("../input/M50_okane_modified_plating.yaml")
     loaded_param["x_0"] = 0.
     loaded_param["x_100"] = 1.
     print(loaded_param)
     print(loaded_param["k_exp"](1.))
+
+    # param_chen = pybamm.ParameterValues("Chen2020")
+    # param_kane = pybamm.ParameterValues("OKane2022")
+    # param = pybamm.ParameterValues("Mohtat2020")
+    # param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
+    # param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
+    # param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
+    # param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
+    #
+    # param_Ai = pybamm.ParameterValues("Ai2020")
+    # parameters_to_change = ["Negative electrode partial molar volume [m3.mol-1]",
+    #                         "Positive electrode partial molar volume [m3.mol-1]",
+    #                         "Negative electrode LAM constant exponential term",
+    #                         "Positive electrode LAM constant exponential term",
+    #                         "Negative electrode LAM constant proportional term [s-1]",
+    #                         "Positive electrode LAM constant proportional term [s-1]",
+    #                         "Negative electrode critical stress [Pa]",
+    #                         "Positive electrode critical stress [Pa]",
+    #                         "Negative electrode Young's modulus [Pa]",
+    #                         "Positive electrode Young's modulus [Pa]",
+    #                         "Negative electrode Poisson's ratio",
+    #                         "Positive electrode Poisson's ratio",
+    #                         "Negative electrode reference concentration for free of deformation [mol.m-3]",
+    #                         "Positive electrode reference concentration for free of deformation [mol.m-3]",
+    #                         "Negative electrode volume change",
+    #                         "Positive electrode volume change",
+    #                         "Cell thermal expansion coefficient [m.K-1]"]
+    # for p in parameters_to_change:
+    #     param.update({p: param_Ai[p]}, check_already_exists=False)
+    #
+    # parameters_to_change = ["Lithium plating kinetic rate constant [m.s-1]"]
+    # for p in parameters_to_change:
+    #     param.update({p: param_kane[p]}, check_already_exists=False)
+    #
+    # param = update_LAM_params(param)
+    #
+    # model = pybamm.lithium_ion.SPMe(options={"SEI": "ec reaction limited", "x-average side reactions": "false"},
+    #                                 build=False)
+    # model.submodels["Negative active material"] = StressBasedLAM_FP(model.param, "Negative", options={
+    #     "loss of active material": "stress-driven"}, x_average=True, phase="primary")
+    # model.submodels["Positive active material"] = StressBasedLAM_FP(model.param, "Positive", options={
+    #     "loss of active material": "stress-driven"}, x_average=True, phase="primary")
+    # model.build_model()
+    #
+    # write_all_params_to_yaml(param, model, "Mohtat2020_U_","../input/Mohtat_modified_plating.yaml")
+    #
+    # loaded_param = load_params("../input/Mohtat_modified_plating.yaml")
+    # print(loaded_param)

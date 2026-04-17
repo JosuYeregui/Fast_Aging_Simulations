@@ -1,6 +1,7 @@
 import pybamm
 from pybamm.models.submodels.active_material.base_active_material import BaseModel
 from pybamm.models.submodels.active_material.loss_active_material import LossActiveMaterial
+from pybamm.models.submodels.interface.lithium_plating.plating import Plating
 
 def update_LAM_params(param):
 
@@ -122,3 +123,29 @@ class StressBasedLAM_FP(LossActiveMaterial):
         )
 
         return variables
+
+
+class Plating_FP(Plating):
+
+    def set_initial_conditions(self, variables):
+        domain, Domain = self.domain_Domain
+        phase_name = self.phase_name
+        if self.x_average is True:
+            c_plated_Li = variables[
+                f"X-averaged {domain} {phase_name}lithium plating concentration "
+                "[mol.m-3]"
+            ]
+            c_dead_Li = variables[
+                f"X-averaged {domain} {phase_name}dead lithium concentration [mol.m-3]"
+            ]
+        else:
+            c_plated_Li = variables[
+                f"{Domain} {phase_name}lithium plating concentration [mol.m-3]"
+            ]
+            c_dead_Li = variables[
+                f"{Domain} {phase_name}dead lithium concentration [mol.m-3]"
+            ]
+        c_plated_Li_0 = self.phase_param.c_plated_Li_0 #* 0.
+        zero = self.phase_param.c_plated_Li_0 #c_plated_Li_0
+
+        self.initial_conditions = {c_plated_Li: c_plated_Li_0, c_dead_Li: zero}

@@ -44,7 +44,7 @@ def get_t_and_dt(cycler):
 
 
 def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
-    # I, _ = cycler(t/3600.)
+
     I_all = np.asarray([s.I_avg - s.I_avg_dyn[domain] for s in cycler.steps])
     if domain == "p":
         I_all[I_all > 0] = 0
@@ -55,9 +55,7 @@ def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
     m = input_vars["m_" + domain]
     t_steps = np.diff(cycler.times)
     num = [I ** m  * t_steps[idx] for idx, I in enumerate(I_all)]
-    I_avg = sign * (np.sum(num) / cycler.times[-1]) ** (1/m)
-
-    deps_dt = []
+    I_avg = sign * (np.sum(num)/cycler.times[-1]) ** (1/m)
 
     cs_cave = input_vars["cs_cave_"+domain](I_avg, eps)
     Omega = input_vars["Omega_"+domain]
@@ -66,20 +64,15 @@ def stressLAM_deps_dt(t, eps, cycler, input_vars, domain):
     stress_geometric_factor = input_vars["omega_fact_"+domain]
 
     stress_t = Omega * E * cs_cave / (1 - nu) / stress_geometric_factor
-    stress_r = 0.
 
-    stress_h = (stress_r + 2 * stress_t) / 3
+    stress_h = (2 * stress_t) / 3
 
-    if stress_h <= 0:
-        deps_dt.append(0.)
-    else:
+    stress_critial = input_vars["stress_critical_"+domain]
+    Beta = input_vars["Beta_"+domain]
 
-        stress_critial = input_vars["stress_critical_"+domain]
-        Beta = input_vars["Beta_"+domain]
+    deps_dt = -Beta * np.abs(stress_h / stress_critial) ** m
 
-        deps_dt.append(-Beta * np.abs(stress_h / stress_critial) ** m)
-
-    return np.sum(deps_dt * t_steps) / np.sum(t_steps)
+    return deps_dt
 
 
 def tfunc_integration_LSEI(L0, eps_n, t, cycler, input_vars):
@@ -165,7 +158,7 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
         LLI = LLI_SEI_stress  # + LLI_pl
 
         # Update parameters
-        soc_comp = max(LLI / Qn - soc_chg, 0) # 5.827614940463554
+        soc_comp = max(LLI / Qn - soc_chg, 0)
         #sol_n = input_vars["cini_n"] / input_vars["csmax_n"] - LLI / Qn
         #soc_n = (sol_n - input_vars["x_0"]) / (input_vars["x_100"] - input_vars["x_0"])
         sol_n = max(soc-soc_comp, 0) * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
