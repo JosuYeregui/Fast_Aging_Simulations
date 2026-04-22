@@ -7,8 +7,6 @@ def get_dif(y, t, cycler, input_vars):
 
     #L = tfunc_integration_LSEI(L0, y[1], t, cycler, input_vars)
     #dLdt = (L - L0)
-    #L = piecewise_integration_LSEI(L0, cycler, input_vars)
-    #dLdt2 = (L - L0) / cycler.total_time
     L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
     dLdt = (L - L0) / (cycler.total_time)
 
@@ -86,10 +84,12 @@ def tfunc_integration_LSEI(L0, eps_n, t, cycler, input_vars):
         x_100 = input_vars["x_100"]
         sol_n = soc * (x_100 - x_0) + x_0
         eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
+        arrhenius = np.exp(input_vars["E_act_SEI"] / input_vars["R"]* (1 / 298.15 - 1 / input_vars["T"]))
+        k_sei = input_vars["k_sei"] * arrhenius
         return np.exp(
             -input_vars["alpha"] * input_vars["F"] * eta /
             (input_vars["R"] * input_vars["T"])
-        ) * input_vars["k_sei"]
+        ) * k_sei
 
     k_exp_t = k_exp
     D_ec = input_vars["D_ec"]
@@ -164,79 +164,17 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
         sol_n = max(soc-soc_comp, 0) * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
 
         eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
+        arrhenius = np.exp(input_vars["E_act_SEI"] / input_vars["R"] * (1 / 298.15 - 1 / input_vars["T"]))
+        k_sei = input_vars["k_sei"] * arrhenius
         k_mid = np.exp(
             -input_vars["alpha"] * input_vars["F"] * eta /
             (input_vars["R"] * input_vars["T"])
-        ) * input_vars["k_sei"]
+        ) * k_sei
         L = (-D_ec + np.sqrt(
             D_ec ** 2 + 2 * k_mid * (D_ec * L + 0.5 * k_mid * L ** 2 + A_ec * D_ec * k_mid * dt))) / k_mid
 
     return L
 
-
-def piecewise_integration_LSEI(L0, cycler, input_vars, slope_tol=1e-3, min_len=5):
-    """
-    Piecewise integration for dL/dt = A*D*k/(D + k*L)
-    treating nearly-constant k segments analytically.
-    """
-    k_exp_fn = input_vars["k_exp"]
-    D_ec = input_vars["D_ec"]
-    A_ec = input_vars["A_ec"]
-
-    #t = np.linspace(0, cycler.total_time, 1000)
-    #dt = np.diff(t)
-    t, dt = get_t_and_dt(cycler)
-
-    k_exp_t = []
-    for t_ in t:
-        _, soc_ = cycler(t_)
-        k_exp_t.append(k_exp_fn(soc_))
-
-    # Compute relative slope of k_exp_t to detect flat regions ("plateaus")
-    dk = np.gradient(k_exp_t, t,)
-    flat = np.abs(dk / np.maximum(np.abs(k_exp_t), 1e-30)) < slope_tol
-
-    # Identify contiguous flat regions
-    segments = []
-    i = 0
-    N = len(t)
-    while i < N - 1:
-        if flat[i]:
-            j = i
-            while j < N - 1 and flat[j]:
-                j += 1
-            if j - i >= min_len:
-                segments.append((i, j))
-            i = j
-        else:
-            i += 1
-
-    # Integrate step by step
-    L = np.zeros_like(t)
-    L[0] = L0
-    seg_idx = 0
-
-    i = 0
-    while i < N - 1:
-        # If this point is inside a plateau segment
-        if seg_idx < len(segments) and segments[seg_idx][0] <= i < segments[seg_idx][1]:
-            i_start, i_end = segments[seg_idx]
-            k_plateau = np.mean(k_exp_t[i_start:i_end+1])
-            dt_plateau = t[i_end] - t[i_start]
-            Li = L[i_start]
-            # Exact constant-k update
-            L_next = (-D_ec + np.sqrt(D_ec**2 + 2*k_plateau*(D_ec*Li + 0.5*k_plateau*Li**2 + A_ec*D_ec*k_plateau*dt_plateau))) / k_plateau
-            L[i_start+1:i_end+1] = L_next
-            i = i_end
-            seg_idx += 1
-        else:
-            # Normal small-step exact update with local k
-            k_mid = 0.5 * (k_exp_t[i] + k_exp_t[i+1])
-            L[i+1] = (-D_ec + np.sqrt(D_ec**2 + 2*k_mid*(D_ec*L[i] + 0.5*k_mid*L[i]**2 + A_ec*D_ec*k_mid*dt[i]))) / k_mid
-            # L_anal = (-D_ec + np.sqrt((D_ec + k_exp * L0)**2 + 2 * A * D_ec * k_exp ** 2 * t)) / k_exp
-
-            i += 1
-    return L[-1]
 
 def dPlating_dt(t, y, cycler, input_vars):
     I_raw, soc = cycler(t/3600.)

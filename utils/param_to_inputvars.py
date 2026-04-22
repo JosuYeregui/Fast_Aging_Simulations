@@ -74,6 +74,7 @@ def write_all_params_to_yaml(param, model, U_fun_name, yaml_file):
     sei["L_0"] = param["Initial SEI thickness [m]"]
     sei["rho_SEI"] = param["SEI resistivity [Ohm.m]"]
     sei["A_ec"] = sei["c_ec"] * sei["V_SEI"] / sei["z_SEI"]
+    sei["E_act_SEI"] = param["SEI growth activation energy [J.mol-1]"]
 
     # ----------------- Plating ----------------
     plating = data["Plating"]

@@ -266,7 +266,7 @@ def extrapolate_solution(solution, n_cycles):
 if __name__ == "__main__":
 
 
-    tot_cycles = 1000 # Total cycles to simulate
+    tot_cycles = 100 # Total cycles to simulate
     initial_soc = 1.
     save_fig = False
 
@@ -423,6 +423,8 @@ if __name__ == "__main__":
     input_vars["cini_p"] = sol_p * input_vars["csmax_p"]
 
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
+
+    input_vars["T"] += 0.
 
     start_ode_time = time.time()
     history_ode = FastAging_Simulation(
