@@ -145,7 +145,7 @@ class Plating_FP(Plating):
             c_dead_Li = variables[
                 f"{Domain} {phase_name}dead lithium concentration [mol.m-3]"
             ]
-        c_plated_Li_0 = self.phase_param.c_plated_Li_0 #* 0.
-        zero = self.phase_param.c_plated_Li_0 #c_plated_Li_0
+        c_dead_Li_0 = self.phase_param.c_plated_Li_0
+        c_plated_Li_0 = pybamm.Scalar(0.) # self.phase_param.c_plated_Li_0
 
-        self.initial_conditions = {c_plated_Li: c_plated_Li_0, c_dead_Li: zero}
+        self.initial_conditions = {c_plated_Li: c_plated_Li_0, c_dead_Li: c_dead_Li_0}

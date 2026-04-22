@@ -87,6 +87,7 @@ def FastAging_Simulation(y0_vec, input_vars,
         history["soc"].append(system_cycler.soc[-1])
         history["stoichiometry"].append(
             (system_vars["x_0"], system_vars["x_100"], system_vars["y_0"], system_vars["y_100"]))
+        Q = history["Q"][-1]
         #history.append((t, n_cycles, y, cycler.times, LLI, Q, R, cycler.soc[-1]))
 
         # Optional early stopping

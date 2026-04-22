@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 import copy
 import pickle
 
-from main import scipy_rk23_integrate
+from main import FastAging_Simulation
 from utils.param_to_inputvars import load_params
 from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile
 from utils.characterize import *
@@ -61,6 +61,9 @@ if __name__ == "__main__":
 
     tot_cycles = 10000
     initial_soc = 1.
+
+    with open("simulation_charge_UDDS.pkl", "rb") as f:
+        sulzer = pickle.load(f)
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")

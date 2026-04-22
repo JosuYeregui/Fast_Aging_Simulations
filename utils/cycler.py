@@ -257,12 +257,12 @@ class DynamicProfile(Step):
 
         I_p = I.copy()
         I_p[I_p < 0] = 0
-        I_comp_p = np.trapz(I_p, t)
+        I_comp_p = np.trapezoid(I_p, t)
         # Get Iave for positive current profile taking t into account
 
         I_n = I.copy()
         I_n[I_n > 0] = 0
-        I_comp_n = np.trapz(I_n, t)
+        I_comp_n = np.trapezoid(I_n, t)
         return I_comp_p, I_comp_n
 
 class PowerProfile(Step):

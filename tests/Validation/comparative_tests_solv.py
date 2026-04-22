@@ -141,48 +141,33 @@ def extract_y_from_solution(sol):
 
     Qp = eps_p * L * cs_max * F * A / 3600.
 
-    #LLI_sei = sol["Loss of capacity to negative SEI [A.h]"].entries
     L_sei = sol["X-averaged negative SEI thickness [m]"].entries
-    n_Li = (sol["Average negative particle concentration [mol.m-3]"].entries / param["Maximum concentration in negative electrode [mol.m-3]"] * Qn +
-             sol["Average positive particle concentration [mol.m-3]"].entries / param["Maximum concentration in positive electrode [mol.m-3]"] * Qp) * 3600 / 96485.33
-    c_pl = sol["X-averaged negative dead lithium concentration [mol.m-3]"].entries + sol["X-averaged positive dead lithium concentration [mol.m-3]"].entries
+    n_Li = (sol["Average negative particle concentration [mol.m-3]"].entries / param[
+        "Maximum concentration in negative electrode [mol.m-3]"] * Qn +
+            sol["Average positive particle concentration [mol.m-3]"].entries / param[
+                "Maximum concentration in positive electrode [mol.m-3]"] * Qp) * 3600 / 96485.33
+    # c_pl = sol["X-averaged negative dead lithium concentration [mol.m-3]"].entries + sol["X-averaged positive dead lithium concentration [mol.m-3]"].entries
+    L_pl = sol["X-averaged negative dead lithium thickness [m]"].entries
     eps_n = sol["X-averaged negative electrode active material volume fraction"].entries
     eps_p = sol["X-averaged positive electrode active material volume fraction"].entries
 
-    return {"n_Li": n_Li, "L_sei": L_sei, "c_pl": c_pl, "eps_n": eps_n, "eps_p": eps_p}
+    return {"n_Li": n_Li, "L_sei": L_sei, "L_pl": L_pl,
+            "eps_n": eps_n, "eps_p": eps_p}
 
 
 import numpy as np
 def update_input_params(param_input, extrapolated_vars, parameter_values):
-
-    # dQn = (sol["Negative electrode capacity [A.h]"].entries[-1] * extrapolated_vars["eps_n"] /
-    #        sol["X-averaged negative electrode active material volume fraction"].entries[-1])
-
-    #param_input = {}
-    # param_input["Initial concentration in negative electrode [mol.m-3]"] -= extrapolated_vars["LLI_sei"] / dQn * parameter_values["Maximum concentration in negative electrode [mol.m-3]"]
-
-    #LLI_SEI_stress = (extrapolated_vars["L_sei"] - prev_params["Initial SEI thickness [m]"]) * A * F / (prev_params["SEI partial molar volume [m3.mol-1]"] * 3600.) * prev_params["Ratio of lithium moles to SEI moles"] * a_s * L
-    #LLI_Pl = extrapolated_vars["LLI_sei"] * A * F / (prev_params["Lithium metal partial molar volume [m3.mol-1]"] * 3600.) * a_s * L
-    #LLI = LLI_SEI_stress + LLI_Pl
 
     x_0, y_0, x_100, y_100 = extract_stoich_from_param(prev_params, extrapolated_vars)
 
     param_input["Initial concentration in negative electrode [mol.m-3]"] = x_100 * parameter_values["Maximum concentration in negative electrode [mol.m-3]"]
     param_input["Initial concentration in positive electrode [mol.m-3]"] = y_100 * parameter_values["Maximum concentration in positive electrode [mol.m-3]"]
 
-    # param_input["Initial concentration in negative electrode [mol.m-3]"] = prev_params[
-    #                                                                            "Initial concentration in negative electrode [mol.m-3]"] - \
-    #                                                                        extrapolated_vars["LLI_sei"] / Qn * \
-    #                                                                        parameter_values[
-    #                                                                            "Maximum concentration in negative electrode [mol.m-3]"]  - extrapolated_vars["c_pl"]
-    # param_input["Initial concentration in negative electrode [mol.m-3]"] = prev_params[
-    #                                                                            "Initial concentration in negative electrode [mol.m-3]"] - \
-    #                                                                        LLI_SEI_stress / dQn * cs_max - extrapolated_vars["c_pl"] * (1+eps_n)
-    # * (1 + extrapolated_vars["eps_n"])
-
-    #param_input["Initial concentration in negative electrode [mol.m-3]"] = max(1., param_input["Initial concentration in negative electrode [mol.m-3]"])
     param_input["Initial SEI thickness [m]"] = extrapolated_vars["L_sei"]
-    param_input["Initial plated lithium concentration [mol.m-3]"] = extrapolated_vars["c_pl"]#extrapolated_vars["c_pl"]
+
+    a_n = extrapolated_vars["eps_n"] * 3 / parameter_values["Negative particle radius [m]"]
+    V_Li = parameter_values["Lithium metal partial molar volume [m3.mol-1]"]
+    param_input["Initial plated lithium concentration [mol.m-3]"] = extrapolated_vars["L_pl"] * a_n / V_Li
 
     # Load the extrapolated eps
     param_input["Negative electrode active material volume fraction"] =  extrapolated_vars["eps_n"]
@@ -190,7 +175,7 @@ def update_input_params(param_input, extrapolated_vars, parameter_values):
 
     return param_input
 
-COARSE_KEYS = ["n_Li", "L_sei", "c_pl", "eps_n", "eps_p"]
+COARSE_KEYS = ["n_Li", "L_sei", "L_pl", "eps_n", "eps_p"]
 
 def y_dict_to_vec(y):
     return np.array([y[k] for k in COARSE_KEYS], dtype=float)
@@ -205,7 +190,7 @@ def eval_delta_y(y_vec, sim, param_input, parameter_values):
     extrapolated_vars = {
         "n_Li": y_dict["n_Li"],
         "L_sei": y_dict["L_sei"],
-        "c_pl": y_dict["c_pl"],
+        "L_pl": y_dict["L_pl"],
         "eps_n": y_dict["eps_n"],
         "eps_p": y_dict["eps_p"],
     }
@@ -277,19 +262,16 @@ def extrapolate_solution(solution, n_cycles):
 
     return extrapolated_vars
 
-# sol_baseline.cycles[-1].steps[-1].y_slices
+
 if __name__ == "__main__":
+
 
     tot_cycles = 1000 # Total cycles to simulate
     initial_soc = 1.
+    save_fig = False
 
-    def sei_death(L_sei):
-        gamma_0 = pybamm.Parameter("Dead lithium decay constant [s-1]")
-        L_sei_0 = 5e-9
 
-        gamma = gamma_0 * L_sei_0 / L_sei
-
-        return gamma
+    # -------------- Define model ---------------------
 
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
@@ -297,27 +279,18 @@ if __name__ == "__main__":
     param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
     param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
     param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
-    # param["Ratio of lithium moles to SEI moles"] = 2.
 
     param["EC diffusivity [m2.s-1]"] /= 150
     param["Positive electrode LAM constant proportional term [s-1]"] /= 2000.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
     param["Lithium plating kinetic rate constant [m.s-1]"] /= 100.
-    #param["Death lithium decay rate [s-1]"] = sei_death
 
     param["Upper voltage cut-off [V]"] = 4.2
-
     param = update_LAM_params(param)
-
     param.set_initial_state(initial_soc)
-
-
-
     prev_params = deepcopy(param)
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
-
-    # spm = pybamm.lithium_ion.SPM({"SEI": "ec reaction limited", "loss of active material": "stress-driven","x-average side reactions":"true"})
 
     model = pybamm.lithium_ion.SPMe(
         options={"SEI": "ec reaction limited", "x-average side reactions": "false"},
@@ -341,6 +314,10 @@ if __name__ == "__main__":
 
     model.build_model()
 
+
+    # -------------- Baseline ---------------------
+
+
     exp = ("Discharge at 1C until 3 V", "Rest for 1 hour", "Charge at 0.3C until 4.2 V","Hold at 4.2V until C/50")
 
     experiment = pybamm.Experiment([exp] * tot_cycles)
@@ -354,66 +331,39 @@ if __name__ == "__main__":
     n_Li0 = n_Li0[0]
 
 
+    # -------------- Sulzer ---------------------
+
+
     extrapolation_results = {"cycle": [], "Q": [], "eps_n": [], "eps_p": [], "L_sei": [], "LLI_sei": [], "nLi":[]}
     starting_sol = None
 
     param_input = {"Initial concentration in negative electrode [mol.m-3]": param[
                        "Initial concentration in negative electrode [mol.m-3]"],
+                   "Initial concentration in positive electrode [mol.m-3]": param[
+                       "Initial concentration in positive electrode [mol.m-3]"],
                    "Initial SEI thickness [m]": param["Initial SEI thickness [m]"],
-                   "Initial plated lithium concentration [mol.m-3]": param["Initial plated lithium concentration [mol.m-3]"],
+                   "Initial plated lithium concentration [mol.m-3]": param["Initial plated lithium concentration [mol.m-3]"]*0,
                    "Negative electrode active material volume fraction": param[
                        "Negative electrode active material volume fraction"],
                    "Positive electrode active material volume fraction": param[
-                       "Positive electrode active material volume fraction"]}
+                       "Positive electrode active material volume fraction"],}
     cs_ini = param_input["Initial concentration in negative electrode [mol.m-3]"]
 
-    experiment = pybamm.Experiment(["Discharge at 1C until 3 V"])
-
-
     param.update({"Initial concentration in negative electrode [mol.m-3]": "[input]",
+                  "Initial concentration in positive electrode [mol.m-3]": "[input]",
                   "Initial SEI thickness [m]": "[input]",
                   "Initial plated lithium concentration [mol.m-3]": "[input]",
                   "Negative electrode active material volume fraction": "[input]",
                   "Positive electrode active material volume fraction": "[input]",})
 
-
-    # sim = pybamm.Simulation(model, experiment=experiment, parameter_values=param)
-    #
-    # start_extrap_time = time.time()
-    #
-    # sol_0 = sim.solve(inputs=param_input)
-    # y0_vec, _ = extract_y0_yend(sol_0)
-    # y0_vec = y_dict_to_vec(y0_vec)
-
     experiment = pybamm.Experiment([exp])
     sim = pybamm.Simulation(model, experiment=experiment, parameter_values=param)
 
-    # start_extrap_time = time.time()
-    # n_cycles = 1
-    # extrap_time = 0.
-    # results_sulzer = []
-    # for i in range(int(tot_cycles // n_cycles) + 1):
-    #     # Simulate the experiment from start or (modified) previous solution
-    #     if starting_sol is not None:
-    #         sol = sim.solve(inputs=param_input, starting_solution=None)  # starting_solution=starting_sol)
-    #     else:
-    #         sol = sim.solve(inputs=param_input)
-    #     # Last cycle containing the steps of the defined experiment sequence
-    #     sol_last = sol.cycles[-1]
-    #
-    #     # Extrapolate variables using the last cycle simulation information
-    #     extrapolated_vars = extrapolate_solution(sol_last, n_cycles)
-    #
-    #     results_sulzer.append((i*n_cycles, extrapolated_vars, sol_last))
-    #
-    #     # Hemen parameter load-a egin behar dugu
-    #     # sol_last = load_extrapolated_into_solution(sol_last, extrapolated_vars)
-    #     param_input = update_input_params(param_input, extrapolated_vars, None)
-    #     # sim.solution = None
-    #
-    #     # starting_sol = sol_last
-    #x_0, x_100, y_100, y_0 = pybamm.lithium_ion.get_min_max_stoichiometries(prev_params)
-    y0_vec = y_dict_to_vec({"n_Li": n_Li0, "L_sei": prev_params["Initial SEI thickness [m]"], "c_pl": 0., "eps_n": prev_params["Negative electrode active material volume fraction"], "eps_p": prev_params["Positive electrode active material volume fraction"]})
+    y0_vec = y_dict_to_vec({"n_Li": n_Li0,
+                            "L_sei": prev_params["Initial SEI thickness [m]"],
+                            "L_pl": 0.,
+                            "eps_n": prev_params["Negative electrode active material volume fraction"],
+                            "eps_p": prev_params["Positive electrode active material volume fraction"],})
 
     start_extrap_time = time.time()
     results_sulzer = scipy_rk23_integrate(
@@ -431,7 +381,11 @@ if __name__ == "__main__":
     extrap_time = time.time() - start_extrap_time
     print("Sulzer time: ", extrap_time)
 
-    input_vars = load_params("../input/M50_okane_modified_plating.yaml")
+
+    # -------------- Proposed solution ---------------------
+
+
+    input_vars = load_params("../../input/M50_okane_modified_plating.yaml")
     input_vars["D_ec"] /= 150
     # input_vars["k_sei"] /= 1000
     input_vars["Beta_n"] *= 20
@@ -484,6 +438,10 @@ if __name__ == "__main__":
     ode_time = time.time() - start_ode_time
     print("ODE + integration time: ", ode_time)
 
+
+    # -------------- Process results ---------------------
+
+
     # t_ode = [h[0] for h in history]
     t_ode = history_ode["t [s]"] / 3600.
     cycles_ode = history_ode["n_cycles"]
@@ -529,85 +487,12 @@ if __name__ == "__main__":
     epsp_bs = np.asarray([s["X-averaged positive electrode active material volume fraction"].entries[0] for s in base_sol.cycles])
     LAMp_bs = (1 - epsp_bs / prev_params["Positive electrode active material volume fraction"]) * 100.
     Lsei_bs = np.asarray([s["X-averaged negative SEI thickness [m]"].entries[0] for s in base_sol.cycles]) * 1e9
-
-
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, Q_bs, label="Baseline", color="black")
-    ax.scatter(cycles_sulzer, Q_sulzer, label="[X]", color="black", marker="x")
-    ax.scatter(cycles_ode, Q_ode, label="Proposed", color="black")
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$Q [Ah]$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/Q.pdf', dpi=300)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, LAMn_bs, label="Baseline", color="blue")
-    ax.scatter(cycles_sulzer, LAMn_sulzer, label="[X]", color="blue", marker="x")
-    ax.scatter(cycles_ode, LAMn_ode, label="Proposed", color="blue")
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$LAM_n [\%]$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/LAMn.pdf', dpi=300)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, LAMp_bs, label="Baseline", color="orange")
-    ax.scatter(cycles_sulzer, LAMp_sulzer, label="[X]", color="orange", marker="x")
-    ax.scatter(cycles_ode, LAMp_ode, label="Proposed", color="orange")
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$LAM_p [\%]$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/LAMp.pdf', dpi=300)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, Lpl_bs, label="Baseline", color="green")
-    ax.scatter(cycles_sulzer, Lpl_sulzer, label="[X]", color="green", marker="x")
-    ax.scatter(cycles_ode, Lpl_ode, label="Proposed", color="green")
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$L_{Plating} [nm]$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/Lplating.pdf', dpi=300)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, Lsei_bs, label="Baseline", color="lightgreen")
-    ax.scatter(cycles_sulzer, Lsei_sulzer, label="[X]", color="lightgreen", marker="x")
-    ax.scatter(cycles_ode, Lsei_ode, label="Proposed", color="lightgreen")
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$L_{SEI} [nm]$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/Lsei.pdf', dpi=300)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, stoich_bs[:, 1], label="$y_0$", color="red")
-    ax.scatter(cycles_sulzer, stoich_sulzer[:, 1], color="red", marker="x")
-    ax.scatter(cycles_ode, stoich_ode[:, 2], color="red")
-
-    ax.plot(cycles_bs, stoich_bs[:, 2], label="$x_{100}$", color="cyan")
-    ax.scatter(cycles_sulzer, stoich_sulzer[:, 2], color="cyan", marker="x")
-    ax.scatter(cycles_ode, stoich_ode[:, 1], color="cyan")
-
-    ax.set_xlabel("Cycles")
-    ax.set_ylabel("$\theta$")
-    plt.legend(fontsize='x-small')
-    plt.xlim([0, tot_cycles])
-    plt.tight_layout()
-    #plt.savefig('Results/stoich.pdf', dpi=300)
-    plt.show()
+    por_n_bs = np.asarray([s["X-averaged negative electrode porosity"].entries[0] for s in base_sol.cycles])
+    por_p_bs = np.asarray([s["X-averaged positive electrode porosity"].entries[0] for s in base_sol.cycles])
+    dead_lithium_n = np.asarray([s["X-averaged negative dead lithium concentration [mol.m-3]"].entries[0] for s in base_sol.cycles])
+    dead_lithium_p = np.asarray([s["X-averaged positive dead lithium concentration [mol.m-3]"].entries[0] for s in base_sol.cycles])
+    #print(dead_lithium_n, dead_lithium_p)
+    #print(por_p, por_n)
 
 
     variables_to_interpolate_ode = {
@@ -640,6 +525,9 @@ if __name__ == "__main__":
     for name, data in variables_to_interpolate_sulzer.items():
         interpolated_results_sulzer[name] = np.interp(target_cycle, cycles_sulzer, data)
 
+    stoich_ode_interp = np.array([np.interp(target_cycle, cycles_ode, stoich_ode[:, col]) for col in range(stoich_ode.shape[1])])
+    stoich_sulzer_interp = np.array([np.interp(target_cycle, cycles_sulzer, stoich_sulzer[:, col]) for col in range(stoich_sulzer.shape[1])])
+
     results_bs = {
         "Lsei": Lsei_bs[tot_cycles-1],
         "eps_n": epsn_bs[tot_cycles-1],
@@ -650,8 +538,105 @@ if __name__ == "__main__":
         "Q": Q_bs[tot_cycles-1]
     }
 
-    for ode, sul, bs in zip(interpolated_results_ode.items(), interpolated_results_sulzer.items(), results_bs.items()):
+    for i, (ode, sul, bs) in enumerate(zip(interpolated_results_ode.items(), interpolated_results_sulzer.items(), results_bs.items())):
         name = ode[0]
         error_sul = abs(sul[1] - bs[1]) / abs(bs[1]) * 100 if bs[1] != 0 else float('inf')
         error_ode = abs(ode[1] - bs[1]) / abs(bs[1]) * 100 if bs[1] != 0 else float('inf')
         print(f"{name}: Error Sulzer={error_sul:.2f}%, Proposed={error_ode:.2f}%")
+        variables_to_interpolate_ode[name] = np.append(variables_to_interpolate_ode[name], ode[1])
+        variables_to_interpolate_sulzer[name] = np.append(variables_to_interpolate_sulzer[name], sul[1])
+        if i == 0:
+            cycles_ode = np.append(cycles_ode, tot_cycles)
+            cycles_sulzer = np.append(cycles_sulzer, tot_cycles)
+
+    Lsei_ode, eps_n_ode, LAMn_ode, eps_p_ode, LAMp_ode, Lpl_ode, Q_ode = (
+        variables_to_interpolate_ode[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q"]
+    )
+    Lsei_sulzer, eps_n_sulzer, LAMn_sulzer, eps_p_sulzer, LAMp_sulzer, Lpl_sulzer, Q_sulzer = (
+        variables_to_interpolate_sulzer[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q"]
+    )
+    stoich_ode = np.vstack([stoich_ode, stoich_ode_interp])
+    stoich_sulzer = np.vstack([stoich_sulzer, stoich_sulzer_interp])
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, Q_bs, label="Baseline", color="black")
+    ax.scatter(cycles_sulzer, Q_sulzer, label="[X]", color="black", marker="x")
+    ax.scatter(cycles_ode, Q_ode, label="Proposed", color="black")
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel("$Q [Ah]$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/Q.pdf', dpi=300)
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, LAMn_bs, label="Baseline", color="blue")
+    ax.scatter(cycles_sulzer, LAMn_sulzer, label="[X]", color="blue", marker="x")
+    ax.scatter(cycles_ode, LAMn_ode, label="Proposed", color="blue")
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel("$LAM_n [\%]$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/LAMn.pdf', dpi=300)
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, LAMp_bs, label="Baseline", color="orange")
+    ax.scatter(cycles_sulzer, LAMp_sulzer, label="[X]", color="orange", marker="x")
+    ax.scatter(cycles_ode, LAMp_ode, label="Proposed", color="orange")
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel("$LAM_p [\%]$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/LAMp.pdf', dpi=300)
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, Lpl_bs, label="Baseline", color="green")
+    ax.scatter(cycles_sulzer, Lpl_sulzer, label="[X]", color="green", marker="x")
+    ax.scatter(cycles_ode, Lpl_ode, label="Proposed", color="green")
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel("$L_{Plating} [nm]$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/Lplating.pdf', dpi=300)
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, Lsei_bs, label="Baseline", color="lightgreen")
+    ax.scatter(cycles_sulzer, Lsei_sulzer, label="[X]", color="lightgreen", marker="x")
+    ax.scatter(cycles_ode, Lsei_ode, label="Proposed", color="lightgreen")
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel("$L_{SEI} [nm]$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/Lsei.pdf', dpi=300)
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    ax.plot(cycles_bs, stoich_bs[:, 1], label="$y_0$", color="red")
+    ax.scatter(cycles_sulzer, stoich_sulzer[:, 1], color="red", marker="x")
+    ax.scatter(cycles_ode, stoich_ode[:, 2], color="red")
+
+    ax.plot(cycles_bs, stoich_bs[:, 2], label="$x_{100}$", color="cyan")
+    ax.scatter(cycles_sulzer, stoich_sulzer[:, 2], color="cyan", marker="x")
+    ax.scatter(cycles_ode, stoich_ode[:, 1], color="cyan")
+
+    ax.set_xlabel("Cycles")
+    ax.set_ylabel(r"$\theta$")
+    plt.legend(fontsize='x-small')
+    plt.xlim([0, tot_cycles])
+    plt.tight_layout()
+    if save_fig:
+        plt.savefig('Results/stoich.pdf', dpi=300)
+    plt.show()
