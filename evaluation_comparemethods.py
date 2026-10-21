@@ -167,12 +167,13 @@ if __name__ == "__main__":
 
 
     input_vars = load_params("input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 150
-    #input_vars["k_sei"] /= 1000
-    input_vars["Beta_n"] *= 20
-    input_vars["Beta_p"] /= 2000
-    input_vars["k_plating"] /= 100
-    input_vars["D_n"] *= 1
+    # The following modifications are included in the modified parameter set, so they are commented out here.
+    # input_vars["D_ec"] /= 150
+    # #input_vars["k_sei"] /= 1000
+    # input_vars["Beta_n"] *= 20
+    # input_vars["Beta_p"] /= 2000
+    # input_vars["k_plating"] /= 100
+    # input_vars["D_n"] *= 1
 
     # input_vars["U_sei"] = 0.4
 

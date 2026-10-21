@@ -15,9 +15,10 @@ if __name__ == "__main__":
     # -------------- Load parameters ----------------
 
     input_vars = load_params("./input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 200
-    input_vars["Beta_p"] /= 600
-    input_vars["Beta_n"] *= 20
+    # The following modifications are included in the modified parameter set, so they are commented out here.
+    # input_vars["D_ec"] /= 200
+    # input_vars["Beta_p"] /= 600
+    # input_vars["Beta_n"] *= 20
 
 
     # ---------- Define simulation steps -------------
