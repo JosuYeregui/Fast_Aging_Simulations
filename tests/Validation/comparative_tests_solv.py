@@ -266,9 +266,10 @@ def extrapolate_solution(solution, n_cycles):
 if __name__ == "__main__":
 
 
-    tot_cycles = 100 # Total cycles to simulate
+    tot_cycles = 1000 # Total cycles to simulate
     initial_soc = 1.
     save_fig = False
+    T_dev = 0
 
 
     # -------------- Define model ---------------------
@@ -284,6 +285,13 @@ if __name__ == "__main__":
     param["Positive electrode LAM constant proportional term [s-1]"] /= 2000.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
     param["Lithium plating kinetic rate constant [m.s-1]"] /= 100.
+
+    print(param["EC diffusivity [m2.s-1]"], param["Positive electrode LAM constant proportional term [s-1]"],
+          param["Negative electrode LAM constant proportional term [s-1]"],
+          param["Lithium plating kinetic rate constant [m.s-1]"])
+
+    param["Initial temperature [K]"] += T_dev
+    param["Ambient temperature [K]"] += T_dev
 
     param["Upper voltage cut-off [V]"] = 4.2
     param = update_LAM_params(param)
@@ -424,7 +432,7 @@ if __name__ == "__main__":
 
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
-    input_vars["T"] += 0.
+    input_vars["T"] += T_dev
 
     start_ode_time = time.time()
     history_ode = FastAging_Simulation(

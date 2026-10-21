@@ -7,15 +7,15 @@ def get_dif(y, t, cycler, input_vars):
 
     #L = tfunc_integration_LSEI(L0, y[1], t, cycler, input_vars)
     #dLdt = (L - L0)
-    L = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
-    dLdt = (L - L0) / (cycler.total_time)
+    dLdt = lliaware_integration_LSEI(L0, y[1], cycler, input_vars)
+
 
     deps_dt_n = stressLAM_deps_dt(t, y[1], cycler, input_vars, "n")
 
     deps_dt_p = stressLAM_deps_dt(t, y[2], cycler, input_vars, "p")
 
     #dPl_dt = dPlating_dt(t, y, cycler, input_vars)
-    L_Pl = piecewise_integration_Plating(y, cycler, input_vars)
+    L_Pl= piecewise_integration_Plating(y, cycler, input_vars, dLdt = dLdt, t_m=t)
     dPl_dt = L_Pl
 
     return [dLdt, deps_dt_n, deps_dt_p, dPl_dt]
@@ -164,8 +164,7 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
         sol_n = max(soc-soc_comp, 0) * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
 
         eta = input_vars["U_n"](sol_n) - input_vars["U_sei"]
-        arrhenius = np.exp(input_vars["E_act_SEI"] / input_vars["R"] * (1 / 298.15 - 1 / input_vars["T"]))
-        k_sei = input_vars["k_sei"] * arrhenius
+        k_sei = input_vars["k_sei"]
         k_mid = np.exp(
             -input_vars["alpha"] * input_vars["F"] * eta /
             (input_vars["R"] * input_vars["T"])
@@ -173,7 +172,9 @@ def lliaware_integration_LSEI(L0, eps_n, cycler, input_vars):
         L = (-D_ec + np.sqrt(
             D_ec ** 2 + 2 * k_mid * (D_ec * L + 0.5 * k_mid * L ** 2 + A_ec * D_ec * k_mid * dt))) / k_mid
 
-    return L
+    arrhenius = np.exp(input_vars["E_act_SEI"] / input_vars["R"] * (1 / 298.15 - 1 / input_vars["T"]))
+    dLdt = (L - L0) / (cycler.total_time) * arrhenius
+    return dLdt
 
 
 def dPlating_dt(t, y, cycler, input_vars):
@@ -213,7 +214,7 @@ def dPlating_dt(t, y, cycler, input_vars):
     return j_k * input_vars["V_Li"] / F
 
 
-def piecewise_integration_Plating(y, cycler, input_vars, slope_tol=1e-15, min_len=10):
+def piecewise_integration_Plating(y, cycler, input_vars, slope_tol=1e-15, min_len=10, dLdt=0., t_m=0):
     """
     Piecewise integration for Lithium Plating.
 
@@ -245,23 +246,49 @@ def piecewise_integration_Plating(y, cycler, input_vars, slope_tol=1e-15, min_le
     as_n = 3 * y[1] / input_vars["R_n"]
     I = I_raw / A
 
+    arrhenius_De = np.exp(input_vars["E_act_De"] / input_vars["R"] * (1 / 298.15 - 1 / T))
+    Deff_n = input_vars["D_e"] * arrhenius_De * input_vars["por_n"] ** input_vars["brug_n"]
+
     ce_int = (input_vars["ce_0"] + I * (1 - input_vars["t_plus"]) / F *
-              (input_vars["L_n"] / (3 * input_vars["Deff_n"])))
+              (input_vars["L_n"] / (3 * Deff_n)))
 
     # ce_int = np.maximum(ce_int, 1e-10)
 
     sol_n = soc_t * (input_vars["x_100"] - input_vars["x_0"]) + input_vars["x_0"]
     sol_n += input_vars["cs_cave_n"](I_raw, y[1]) / input_vars["csmax_n"]  # We need surface concentration
+    sol_n[sol_n < 0] = 0.
+    sol_n[sol_n > 1] = 1.
 
-    j0 = np.sqrt(ce_int) * np.sqrt(sol_n * input_vars["csmax_n"]) * np.sqrt(input_vars["csmax_n"] - sol_n * input_vars["csmax_n"]) * input_vars["m_ref"]
+    arrhenius_j0 = np.exp(input_vars["E_act_j0"] / input_vars["R"] * (1 / 298.15 - 1 / T))
+    j0 = (np.sqrt(ce_int) * np.sqrt(sol_n * input_vars["csmax_n"]) *
+          np.sqrt(input_vars["csmax_n"] - sol_n * input_vars["csmax_n"]) * input_vars["m_ref"] * arrhenius_j0)
     # j0 = np.maximum(j0, 1e-10)  # Avoid division by zero in asinh
 
-    eta_r = -2 * RTF * np.arcsinh(I / (as_n * j0 * input_vars["L_n"]))
+    i_sei = dLdt /(input_vars["V_SEI"]) * F
+    i_pl = y[3] / (t_m + 1) / input_vars["V_Li"] * F
+    i_r = I #- i_sei - i_pl
+    eta_r = -2 * RTF * np.arcsinh(i_r / (as_n * j0 * input_vars["L_n"]))
 
     U_n_vec = np.vectorize(input_vars["U_n"])
     ocp = U_n_vec(sol_n)
 
-    eta_plating = -(eta_r - ocp)
+    arrhenius_sigma_e = np.exp(17000 / input_vars["R"] * (1 / 298.15 - 1 / T))
+
+    sigma_e = (
+            0.1297 * (ce_int / 1000) ** 3 - 2.51 * (ce_int / 1000) ** 1.5 + 3.329 * (ce_int / 1000)
+    )
+    sigma_e *= arrhenius_sigma_e
+    delta_phie = I / sigma_e * (input_vars["L_n"] / (3 * (input_vars["por_n"] ** input_vars["brug_n"])))
+
+    #eta_sei = y[0] * input_vars["rho_SEI"] / as_n * I_raw
+    j_tot = I / (as_n * input_vars["L_n"])
+    eta_sei = j_tot * input_vars["rho_SEI"] * y[0]
+
+    #eta_plating = -(eta_r - ocp) #- eta_sei
+    eta_plating = ocp - eta_r #- eta_sei
+    #eta_plating = eta_sei + delta_phie - ocp
+
+
     i0 = input_vars["k_plating"] * ce_int * F
     #i0 = 1e-4*ce_int
     j_k = i0 * np.exp(-input_vars["alpha_plating"] * eta_plating / RTF)

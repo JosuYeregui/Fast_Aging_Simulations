@@ -82,16 +82,17 @@ def write_all_params_to_yaml(param, model, U_fun_name, yaml_file):
     plating["alpha_plating"] = param["Lithium plating transfer coefficient"]
     plating["ce_0"] = param["Initial concentration in electrolyte [mol.m-3]"]# param["Initial concentration of lithium in electrolyte [mol.m-3]"]
     plating["t_plus"] = param["Cation transference number"] # param["Lithium transference number"]
-    brug_n = param["Negative electrode Bruggeman coefficient (electrolyte)"]
-    por_n = param["Negative electrode porosity"]
-    brug_s = param["Separator Bruggeman coefficient (electrolyte)"]
-    por_s = param["Separator porosity"]
-    plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_n ** brug_n)
-    plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value * por_s ** brug_s)
+    plating["por_n"] = param["Negative electrode porosity"]
+    plating["brug_n"] = param["Negative electrode Bruggeman coefficient (electrolyte)"]
+    plating["por_s"] = param["Separator porosity"]
+    plating["brug_s"] = param["Separator Bruggeman coefficient (electrolyte)"]
+    plating["D_e"] = float(param["Electrolyte diffusivity [m2.s-1]"](1., 298.15).value)
+    plating["E_act_De"] = 17000  # From Okane2022
     # plating["Deff_n"] = float(param["Electrolyte diffusivity [m2.s-1]"].value * por_n ** brug_n)
     # plating["Deff_s"] = float(param["Electrolyte diffusivity [m2.s-1]"].value * por_s ** brug_s)
     plating["L_s"] = float(param["Separator thickness [m]"])
     plating["m_ref"] = 6.48e-7  # From Okane2022
+    plating["E_act_j0"] = 35000  # From Okane2022
     plating["V_Li"] = float(param["Lithium metal partial molar volume [m3.mol-1]"])
 
     # ---------------- Battery model ----------------

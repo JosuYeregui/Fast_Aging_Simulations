@@ -8,7 +8,7 @@ from utils.characterize import updated_model_Q, updated_model_R
 
 def FastAging_Simulation(y0_vec, input_vars,
                          tot_cycles, cycler, stop_Q=0.2, rtol=1e-2, atol=1e-2,
-                         stop_condition_fn=None, max_step=None, return_system_vars=False):
+                         stop_condition_fn=None, max_step=None, return_system_vars=False, print_Qmin=True):
     """
     Integrates dy/dt = Δy(y) from t=0 to t=t_final using SciPy's RK23.
     One RHS evaluation = one cycle simulation.
@@ -24,7 +24,7 @@ def FastAging_Simulation(y0_vec, input_vars,
         L0_pl = system_vars["L0_pl"]
 
         R0 = system_cycler.R
-        Q = updated_model_Q(y, system_vars, system_cycler, L0, L0_pl)
+        Q, LLI = updated_model_Q(y, system_vars, system_cycler, L0, L0_pl, return_lli=True)
         # Q, LLI = updated_model_Q(y, Q, eps_0, input_vars, L0, deepcopy(param))
         R = updated_model_R(y, system_vars, L0, R0)
 
@@ -34,6 +34,7 @@ def FastAging_Simulation(y0_vec, input_vars,
 
         system_vars["L0_sei"] = y[0]
         system_vars["L0_pl"] = y[3]
+        system_vars["LLI"] = LLI * 100.
         # store last computed cycle
         return dy
 
@@ -46,6 +47,7 @@ def FastAging_Simulation(y0_vec, input_vars,
 
     system_vars["L0_sei"] = y0_vec[0]
     system_vars["L0_pl"] = y0_vec[3]
+    system_vars["LLI"] = 0.
 
     solver = RK23(rhs, t0=0.0, y0=y0_vec, t_bound=t_final,
                   max_step=max_step, rtol=rtol, atol=atol)
@@ -53,7 +55,7 @@ def FastAging_Simulation(y0_vec, input_vars,
     n_cycles = 0.
     Q0 = system_cycler.Q
     Q = system_cycler.Q
-    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "Q": [], "R": [], "soc": [], "stoichiometry": []}
+    history = {"t [s]": [], "n_cycles": [], "y": [], "times": [], "Q": [], "R": [], "soc": [], "stoichiometry": [], "modes": []}
     history["t [s]"].append(0.)
     history["n_cycles"].append(n_cycles)
     history["y"].append(y0_vec)
@@ -62,6 +64,7 @@ def FastAging_Simulation(y0_vec, input_vars,
     history["R"].append(system_cycler.R)
     history["soc"].append(system_cycler.soc0)
     history["stoichiometry"].append([system_vars["x_0"], system_vars["x_100"], system_vars["y_0"], system_vars["y_100"]])
+    history["modes"].append([y0_vec[1] / input_vars["eps_0_n"]*100., y0_vec[2] / input_vars["eps_0_p"]*100., system_vars["LLI"]])  # initial mode values
 
     #history = [(0.0, n_cycles, y0_vec, cycler.times, 0, Q0, cycler.R, cycler.soc0)]
 
@@ -70,7 +73,8 @@ def FastAging_Simulation(y0_vec, input_vars,
         try:
             solver.step()
         except:
-            print("Q_min reached")
+            if print_Qmin:
+                print("Q_min reached")
             break
 
         t = solver.t
@@ -87,8 +91,9 @@ def FastAging_Simulation(y0_vec, input_vars,
         history["soc"].append(system_cycler.soc[-1])
         history["stoichiometry"].append(
             (system_vars["x_0"], system_vars["x_100"], system_vars["y_0"], system_vars["y_100"]))
+        history["modes"].append([y[1] / input_vars["eps_0_n"] * 100., y[2] / input_vars["eps_0_p"] * 100.,
+                                 system_vars["LLI"]])
         Q = history["Q"][-1]
-        #history.append((t, n_cycles, y, cycler.times, LLI, Q, R, cycler.soc[-1]))
 
         # Optional early stopping
         if stop_condition_fn is not None:

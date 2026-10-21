@@ -296,8 +296,12 @@ if __name__ == "__main__":
     print(f"Total time: {elapsed:.1f}s")
 
     output_file = "simulation_history_WLTC_sulzer_v2.pkl"
+    # Only (t, y) are ever read back (see dynamic_ours_v2.py); `sol` is a
+    # pybamm.Solution holding compiled CasADi objects whose serialization
+    # format is tied to the CasADi version, so it must not be pickled.
+    history_to_save = [(t, y, None) for (t, y, _) in history]
     with open(output_file, "wb") as f:
-        pickle.dump({"history": history, "prev_params": prev_params}, f)
+        pickle.dump({"history": history_to_save, "prev_params": prev_params}, f)
     print(f"Saved to {output_file}")
 
     cycles = [t for (t, _, _) in history]

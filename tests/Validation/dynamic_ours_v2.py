@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     tot_cycles = 10000
     initial_soc = 1.
-    save_fig = False
+    save_fig = True
 
     # -------------- Define model ---------------------
 
@@ -87,11 +87,11 @@ if __name__ == "__main__":
     # -------------- Proposed solution ---------------------
 
     input_vars = load_params("../../input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 150
+    #input_vars["D_ec"] /= 150
     # input_vars["k_sei"] /= 1000
-    input_vars["Beta_n"] *= 20
-    input_vars["Beta_p"] /= 2000
-    input_vars["k_plating"] /= 100
+    # input_vars["Beta_n"] *= 20
+    # input_vars["Beta_p"] /= 2000
+    # input_vars["k_plating"] /= 100
     input_vars["D_n"] *= 1
     # input_vars["U_sei"] = 0.4
 
@@ -128,7 +128,7 @@ if __name__ == "__main__":
         y0_vec=y0_vec,
         input_vars=input_vars,
         tot_cycles=tot_cycles,
-        stop_Q=0.4,
+        stop_Q=0.1,
         cycler=cycl,
         rtol=[1e-5, 1e-3, 1e-3, 1e-5],
         atol=[1e-9, 1e-4, 1e-4, 1e-9],
@@ -168,13 +168,25 @@ if __name__ == "__main__":
     Lsei_sulzer = np.asarray([y[1] for (_, y, _) in sulzer])*1e9
     cycles_sulzer = [t for (t, _, _) in sulzer]
 
+    max_ode = cycles_ode[-1]
+    cutoff_idx = next(i for i, c in enumerate(cycles_sulzer) if c > max_ode)
+    cutoff_idx += 1
+    print(cutoff_idx + 1)
+    cycles_sulzer = cycles_sulzer[:cutoff_idx]
+    Q_sulzer = Q_sulzer[:cutoff_idx]
+    eps_p_sulzer = eps_p_sulzer[:cutoff_idx]
+    LAMp_sulzer = LAMp_sulzer[:cutoff_idx]
+    eps_n_sulzer = eps_n_sulzer[:cutoff_idx]
+    LAMn_sulzer = LAMn_sulzer[:cutoff_idx]
+    Lpl_sulzer = Lpl_sulzer[:cutoff_idx]
+    Lsei_sulzer = Lsei_sulzer[:cutoff_idx]
 
     xlim_cycles = cycles_ode[-1]
 
 
     fig, ax = plt.subplots()
     ax.plot(cycles_sulzer, Q_sulzer, color="black", linestyle="--")
-    ax.scatter(cycles_sulzer, Q_sulzer, label="[X]", color="black", marker="x")
+    ax.scatter(cycles_sulzer, Q_sulzer, label="Sulzer et al.", color="black", marker="x")
     ax.scatter(cycles_ode, Q_ode, label="Proposed", color="black")
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$Q [Ah]$")
@@ -184,12 +196,12 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Q.pdf', dpi=300)
+        plt.savefig('Results/Q_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
     ax.plot(cycles_sulzer, eps_n_sulzer, color="blue", linestyle="--")
-    ax.scatter(cycles_sulzer, eps_n_sulzer, label="[X]", color="blue", marker="x")
+    ax.scatter(cycles_sulzer, eps_n_sulzer, label="Sulzer et al.", color="blue", marker="x")
     ax.scatter(cycles_ode, eps_n_ode, label="Proposed", color="blue")
     ax.set_xlabel("Cycles")
     ax.set_ylabel(r"$\epsilon$")
@@ -203,12 +215,12 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/eps.pdf', dpi=300)
+        plt.savefig('Results/eps_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
     ax.plot(cycles_sulzer, Lpl_sulzer, color="green", linestyle="--")
-    ax.scatter(cycles_sulzer, Lpl_sulzer, label="[X]", color="green", marker="x")
+    ax.scatter(cycles_sulzer, Lpl_sulzer, label="Sulzer et al.", color="green", marker="x")
     ax.scatter(cycles_ode, Lpl_ode, label="Proposed", color="green")
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$L_{Plating} [nm]$")
@@ -216,12 +228,12 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lplating.pdf', dpi=300)
+        plt.savefig('Results/Lplating_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
     ax.plot(cycles_sulzer, Lsei_sulzer, color="lightgreen", linestyle="--")
-    ax.scatter(cycles_sulzer, Lsei_sulzer, label="[X]", color="lightgreen", marker="x")
+    ax.scatter(cycles_sulzer, Lsei_sulzer, label="Sulzer et al.", color="lightgreen", marker="x")
     ax.scatter(cycles_ode, Lsei_ode, label="Proposed", color="lightgreen")
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$L_{SEI} [nm]$")
@@ -229,7 +241,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lsei.pdf', dpi=300)
+        plt.savefig('Results/Lsei_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -242,7 +254,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMn.pdf', dpi=300)
+        plt.savefig('Results/LAMn_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -255,5 +267,5 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMp.pdf', dpi=300)
+        plt.savefig('Results/LAMp_dynamic.pdf', dpi=300)
     plt.show()
