@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 
-from main import scipy_rk23_integrate
+from main import FastAging_Simulation
 from utils.param_to_inputvars import load_params
 from utils.cycler import CCStep, CCCVStep, Cycler, DynamicProfile
 from utils.characterize import *
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     y0_vec = [input_vars["L_0"], input_vars["eps_0_n"], input_vars["eps_0_p"], 0.]  # L, eps_n, eps_p, Plating
 
     start_ode_time = time.time()
-    history = scipy_rk23_integrate(
+    history = FastAging_Simulation(
         y0_vec=y0_vec,
         input_vars=input_vars,
         tot_cycles=tot_cycles,

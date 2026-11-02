@@ -18,7 +18,21 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import scienceplots
 plt.style.use(['science'])
 
-from utils.pybamm_submodels import update_LAM_params, StressBasedLAM_FP, Plating_FP
+FIG_SUFFIX = "_linear"
+
+MODE_COLORS = {"SEI": "#5F7F45", "Plating": "#BC8FB0", "LAMn": "#34557F", "LAMp": "#E3833B"}
+
+#from utils.pybamm_submodels import update_LAM_params, StressBasedLAM_FP, Plating_FP
+
+def graphite_LGM50_electrolyte_exchange_current_density_Chen2020_mod(
+    c_e, c_s_surf, c_s_max, T
+):
+
+    m_ref = 6.48e-7  # (A/m2)(m3/mol)**1.5 - includes ref concentrations
+    E_r = 35000 * 1.3
+    arrhenius = np.exp(E_r / pybamm.constants.R * (1 / 298.15 - 1 / T))
+
+    return m_ref * arrhenius * c_e**0.5 * c_s_surf**0.5 * (c_s_max - c_s_surf) ** 0.5
 
 
 def get_capacity_from_sol(solution, param, idx, esoh_solver):
@@ -262,13 +276,12 @@ def extrapolate_solution(solution, n_cycles):
 
     return extrapolated_vars
 
-
 if __name__ == "__main__":
 
 
-    tot_cycles = 1000 # Total cycles to simulate
+    tot_cycles = 2000 # Total cycles to simulate
     initial_soc = 1.
-    save_fig = False
+    save_fig = True
     T_dev = 0
 
 
@@ -277,18 +290,22 @@ if __name__ == "__main__":
     param_chen = pybamm.ParameterValues("Chen2020")
     param = pybamm.ParameterValues("OKane2022")
     param["Negative electrode OCP [V]"] = param_chen["Negative electrode OCP [V]"]
-    param["Negative electrode diffusivity [m2.s-1]"] = param_chen["Negative electrode diffusivity [m2.s-1]"]
-    param["Positive electrode diffusivity [m2.s-1]"] = param_chen["Positive electrode diffusivity [m2.s-1]"]
-    param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
+    param["Negative particle diffusivity [m2.s-1]"] = param_chen["Negative particle diffusivity [m2.s-1]"]
+    param["Positive particle diffusivity [m2.s-1]"] = param_chen["Positive particle diffusivity [m2.s-1]"]
+    #param["Electrolyte diffusivity [m2.s-1]"] = param["Electrolyte diffusivity [m2.s-1]"](1., 298.15)
+    func = copy.deepcopy(param["Electrolyte diffusivity [m2.s-1]"])
+    param["Electrolyte diffusivity [m2.s-1]"] = lambda c, T: func(1., T)
 
     param["EC diffusivity [m2.s-1]"] /= 150
     param["Positive electrode LAM constant proportional term [s-1]"] /= 2000.
     param["Negative electrode LAM constant proportional term [s-1]"] *= 20.
     param["Lithium plating kinetic rate constant [m.s-1]"] /= 100.
 
-    print(param["EC diffusivity [m2.s-1]"], param["Positive electrode LAM constant proportional term [s-1]"],
-          param["Negative electrode LAM constant proportional term [s-1]"],
-          param["Lithium plating kinetic rate constant [m.s-1]"])
+    param["SEI growth activation energy [J.mol-1]"] *= 2.2
+    param["Lithium plating kinetic rate constant [m.s-1]"] *= 0.1
+    #param["EC diffusivity [m2.s-1]"] *= 0.7
+    param["Negative electrode exchange-current density [A.m-2]"] = graphite_LGM50_electrolyte_exchange_current_density_Chen2020_mod
+
 
     param["Initial temperature [K]"] += T_dev
     param["Ambient temperature [K]"] += T_dev
@@ -301,7 +318,7 @@ if __name__ == "__main__":
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
 
     model = pybamm.lithium_ion.SPMe(
-        options={"SEI": "ec reaction limited", "x-average side reactions": "false"},
+        options={"SEI": "ec reaction limited", "x-average side reactions": "false", "use lumped thermal capacity": "false"},
         build=False)
 
     model.submodels["Negative active material"] = StressBasedLAM(
@@ -311,7 +328,7 @@ if __name__ == "__main__":
     model.submodels["Negative active material"] = StressBasedLAM_FP(model.param, "Negative", options={
         "loss of active material": "stress-driven"}, x_average=True, phase="primary")
 
-    model.submodels["Plating"] = Plating_FP(model.param, "negative", x_average=True, options={"lithium plating": "irreversible"})
+    model.submodels["Plating"] = Plating_FP_old(model.param, "negative", x_average=True, options={"lithium plating": "irreversible"})
 
     model.submodels["Positive active material"] = StressBasedLAM(
         model.param, "Positive"
@@ -338,6 +355,8 @@ if __name__ == "__main__":
                "Positive electrode capacity [A.h]"].entries) * 3600 / 96485.33
     n_Li0 = n_Li0[0]
 
+    cycles_bs = np.arange(len(base_sol.cycles))
+    Lpl_bs = np.asarray([s["X-averaged negative dead lithium thickness [m]"].entries[0] for s in base_sol.cycles]) * 1e9
 
     # -------------- Sulzer ---------------------
 
@@ -393,16 +412,25 @@ if __name__ == "__main__":
     # -------------- Proposed solution ---------------------
 
 
-    input_vars = load_params("../../input/M50_okane_modified_plating.yaml")
-    input_vars["D_ec"] /= 150
-    # input_vars["k_sei"] /= 1000
-    input_vars["Beta_n"] *= 20
-    input_vars["Beta_p"] /= 2000
-    input_vars["k_plating"] /= 100
+    input_vars = load_params("../../../input/M50_okane_modified_plating.yaml")
+    # input_vars["D_ec"] /= 150
+    # # input_vars["k_sei"] /= 1000
+    # input_vars["Beta_n"] *= 20
+    # input_vars["Beta_p"] /= 2000
+    # input_vars["k_plating"] /= 100
     input_vars["D_n"] *= 1
     # input_vars["U_sei"] = 0.4
 
+    base_multipliers = {"k_plating": 0.1, "E_act_SEI": 2.2, "E_act_j0": 1.3}
+    #E_act_Ds = 8000
+
+    input_vars["k_plating"] *= base_multipliers["k_plating"]
+    input_vars["E_act_SEI"] *= base_multipliers["E_act_SEI"]
+    input_vars["E_act_j0"] *= base_multipliers["E_act_j0"]
+    # #input_vars["E_act_Ds"] = E_act_Ds
+
     Q0 = input_vars["Q"]
+    #input_vars["R_int"] = 0.06263196455485556
     Q = copy.deepcopy(Q0)
     R = input_vars["R_int"]
     OCV_fn = get_OVC_func(input_vars)
@@ -480,6 +508,7 @@ if __name__ == "__main__":
     eps_p_sulzer = np.asarray([s["X-averaged positive electrode active material volume fraction"].entries[0] for (_, _, s) in results_sulzer])
     LAMp_sulzer = (1 - eps_p_sulzer / prev_params["Positive electrode active material volume fraction"]) * 100.
     Lsei_sulzer = np.asarray([s["X-averaged negative SEI thickness [m]"].entries[0] for (_, _, s) in results_sulzer]) * 1e9
+    t_sulzer = np.asarray([s["Time [h]"].entries[0] for (_, _, s) in results_sulzer])
 
 
     cycles_bs = np.arange(len(base_sol.cycles))
@@ -499,10 +528,25 @@ if __name__ == "__main__":
     Lsei_bs = np.asarray([s["X-averaged negative SEI thickness [m]"].entries[0] for s in base_sol.cycles]) * 1e9
     por_n_bs = np.asarray([s["X-averaged negative electrode porosity"].entries[0] for s in base_sol.cycles])
     por_p_bs = np.asarray([s["X-averaged positive electrode porosity"].entries[0] for s in base_sol.cycles])
+    eta_r_bs = -base_sol.cycles[0]["X-averaged negative electrode reaction overpotential [V]"].entries
+    eta_r_az_bs = -base_sol.cycles[-1]["X-averaged negative electrode reaction overpotential [V]"].entries
+    ce_bs = base_sol.cycles[0]["X-averaged negative electrolyte concentration [mol.m-3]"].entries
+    ce_az_bs = base_sol.cycles[-1]["X-averaged negative electrolyte concentration [mol.m-3]"].entries
+    t_bs = np.asarray([s["Time [h]"].entries[0] for s in base_sol.cycles])
     dead_lithium_n = np.asarray([s["X-averaged negative dead lithium concentration [mol.m-3]"].entries[0] for s in base_sol.cycles])
     dead_lithium_p = np.asarray([s["X-averaged positive dead lithium concentration [mol.m-3]"].entries[0] for s in base_sol.cycles])
     #print(dead_lithium_n, dead_lithium_p)
     #print(por_p, por_n)
+
+    # fig, ax = plt.subplots(figsize=(2.1, 2.5))
+    # ax.plot(base_sol.cycles[0]["Time [s]"].entries, eta_r_bs, label="Baseline", color="blue")
+    # ax.plot(base_sol.cycles[-1]["Time [s]"].entries - base_sol.cycles[-1]["Time [s]"].entries[0], eta_r_az_bs, label="Baseline", color="red")
+    # ax.set_xlabel("Cycles")
+    # ax.set_ylabel("eta_r")
+    # plt.legend(fontsize='x-small')
+    # # plt.xlim([0, tot_cycles])
+    # plt.tight_layout()
+    # plt.show()
 
 
     variables_to_interpolate_ode = {
@@ -512,7 +556,8 @@ if __name__ == "__main__":
         "eps_p": eps_p_ode,
         "LAMp": LAMp_ode,
         "Lpl": Lpl_ode,
-        "Q": Q_ode
+        "Q": Q_ode,
+        "t": t_ode,
     }
 
     interpolated_results_ode = {}
@@ -528,7 +573,8 @@ if __name__ == "__main__":
         "eps_p": eps_p_sulzer,
         "LAMp": LAMp_sulzer,
         "Lpl": Lpl_sulzer,
-        "Q": Q_sulzer
+        "Q": Q_sulzer,
+        "t": t_sulzer,
     }
 
     interpolated_results_sulzer = {}
@@ -545,7 +591,8 @@ if __name__ == "__main__":
         "eps_p": epsp_bs[tot_cycles-1],
         "LAMp": LAMp_bs[tot_cycles-1],
         "Lpl": Lpl_bs[tot_cycles-1],
-        "Q": Q_bs[tot_cycles-1]
+        "Q": Q_bs[tot_cycles-1],
+        "t": t_bs[tot_cycles-1]
     }
 
     for i, (ode, sul, bs) in enumerate(zip(interpolated_results_ode.items(), interpolated_results_sulzer.items(), results_bs.items())):
@@ -559,18 +606,18 @@ if __name__ == "__main__":
             cycles_ode = np.append(cycles_ode, tot_cycles)
             cycles_sulzer = np.append(cycles_sulzer, tot_cycles)
 
-    Lsei_ode, eps_n_ode, LAMn_ode, eps_p_ode, LAMp_ode, Lpl_ode, Q_ode = (
-        variables_to_interpolate_ode[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q"]
+    Lsei_ode, eps_n_ode, LAMn_ode, eps_p_ode, LAMp_ode, Lpl_ode, Q_ode, t_ode = (
+        variables_to_interpolate_ode[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q", "t"]
     )
-    Lsei_sulzer, eps_n_sulzer, LAMn_sulzer, eps_p_sulzer, LAMp_sulzer, Lpl_sulzer, Q_sulzer = (
-        variables_to_interpolate_sulzer[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q"]
+    Lsei_sulzer, eps_n_sulzer, LAMn_sulzer, eps_p_sulzer, LAMp_sulzer, Lpl_sulzer, Q_sulzer, t_sulzer = (
+        variables_to_interpolate_sulzer[k] for k in ["Lsei", "eps_n", "LAMn", "eps_p", "LAMp", "Lpl", "Q", "t"]
     )
     stoich_ode = np.vstack([stoich_ode, stoich_ode_interp])
     stoich_sulzer = np.vstack([stoich_sulzer, stoich_sulzer_interp])
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
     ax.plot(cycles_bs, Q_bs, label="Baseline", color="black")
-    ax.scatter(cycles_sulzer, Q_sulzer, label="[X]", color="black", marker="x")
+    ax.scatter(cycles_sulzer, Q_sulzer, label="Sulzer et al.", color="black", marker="x")
     ax.scatter(cycles_ode, Q_ode, label="Proposed", color="black")
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$Q [Ah]$")
@@ -578,59 +625,59 @@ if __name__ == "__main__":
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Q.pdf', dpi=300)
+        plt.savefig(f'Results/Q{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, LAMn_bs, label="Baseline", color="blue")
-    ax.scatter(cycles_sulzer, LAMn_sulzer, label="[X]", color="blue", marker="x")
-    ax.scatter(cycles_ode, LAMn_ode, label="Proposed", color="blue")
+    ax.plot(cycles_bs, LAMn_bs, label="Baseline", color=MODE_COLORS["LAMn"])
+    ax.scatter(cycles_sulzer, LAMn_sulzer, label="Sulzer et al.", color=MODE_COLORS["LAMn"], marker="x")
+    ax.scatter(cycles_ode, LAMn_ode, label="Proposed", color=MODE_COLORS["LAMn"])
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$LAM_n [\%]$")
     plt.legend(fontsize='x-small')
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMn.pdf', dpi=300)
+        plt.savefig(f'Results/LAMn{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, LAMp_bs, label="Baseline", color="orange")
-    ax.scatter(cycles_sulzer, LAMp_sulzer, label="[X]", color="orange", marker="x")
-    ax.scatter(cycles_ode, LAMp_ode, label="Proposed", color="orange")
+    ax.plot(cycles_bs, LAMp_bs, label="Baseline", color=MODE_COLORS["LAMp"])
+    ax.scatter(cycles_sulzer, LAMp_sulzer, label="Sulzer et al.", color=MODE_COLORS["LAMp"], marker="x")
+    ax.scatter(cycles_ode, LAMp_ode, label="Proposed", color=MODE_COLORS["LAMp"])
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$LAM_p [\%]$")
     plt.legend(fontsize='x-small')
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMp.pdf', dpi=300)
+        plt.savefig(f'Results/LAMp{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, Lpl_bs, label="Baseline", color="green")
-    ax.scatter(cycles_sulzer, Lpl_sulzer, label="[X]", color="green", marker="x")
-    ax.scatter(cycles_ode, Lpl_ode, label="Proposed", color="green")
+    ax.plot(cycles_bs, Lpl_bs, label="Baseline", color=MODE_COLORS["Plating"])
+    ax.scatter(cycles_sulzer, Lpl_sulzer, label="Sulzer et al.", color=MODE_COLORS["Plating"], marker="x")
+    ax.scatter(cycles_ode, Lpl_ode, label="Proposed", color=MODE_COLORS["Plating"])
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$L_{Plating} [nm]$")
     plt.legend(fontsize='x-small')
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lplating.pdf', dpi=300)
+        plt.savefig(f'Results/Lplating{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
-    ax.plot(cycles_bs, Lsei_bs, label="Baseline", color="lightgreen")
-    ax.scatter(cycles_sulzer, Lsei_sulzer, label="[X]", color="lightgreen", marker="x")
-    ax.scatter(cycles_ode, Lsei_ode, label="Proposed", color="lightgreen")
+    ax.plot(cycles_bs, Lsei_bs, label="Baseline", color=MODE_COLORS["SEI"])
+    ax.scatter(cycles_sulzer, Lsei_sulzer, label="Sulzer et al.", color=MODE_COLORS["SEI"], marker="x")
+    ax.scatter(cycles_ode, Lsei_ode, label="Proposed", color=MODE_COLORS["SEI"])
     ax.set_xlabel("Cycles")
     ax.set_ylabel("$L_{SEI} [nm]$")
     plt.legend(fontsize='x-small')
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lsei.pdf', dpi=300)
+        plt.savefig(f'Results/Lsei{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(2.1, 2.5))
@@ -648,5 +695,5 @@ if __name__ == "__main__":
     plt.xlim([0, tot_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/stoich.pdf', dpi=300)
+        plt.savefig(f'Results/stoich{FIG_SUFFIX}.pdf', dpi=300)
     plt.show()

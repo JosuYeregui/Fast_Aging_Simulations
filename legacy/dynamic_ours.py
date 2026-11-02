@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     param = update_LAM_params(param)
 
-    input_vars = load_params("../input/M50_okane_modified.yaml")
+    input_vars = load_params("M50_okane_modified.yaml")
     input_vars["D_ec"] /= 200
     input_vars["Beta_p"] /= 600
     input_vars["Beta_n"] *= 20

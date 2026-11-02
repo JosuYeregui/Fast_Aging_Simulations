@@ -124,122 +124,120 @@ class StressBasedLAM_FP(LossActiveMaterial):
 
         return variables
 
-import numpy as np
-
-class Plating_FP(Plating):
-
-    def get_coupled_variables(self, variables):
-        phase_param = self.phase_param
-        domain, Domain = self.domain_Domain
-        T = variables[f"{Domain} electrode temperature [K]"]
-        alpha_plating = phase_param.alpha_plating
-        c_plated_Li = variables[
-            f"{Domain} {self.phase_name}lithium plating concentration [mol.m-3]"
-        ]
-        F_RT = self.param.F / (self.param.R * T)
-
-        ce = variables[
-            f"{Domain} {self.phase_name}electrolyte concentration [mol.m-3]"
-        ]
-        j0_plating = phase_param.j0_plating(ce, c_plated_Li, T)
-        i_app = variables["Total current density [A.m-2]"]
-
-        c_s = variables[f"X-averaged {domain} {self.phase_name}particle surface concentration [mol.m-3]"]
-        c_s_max = self.phase_param.c_max
-        k_int = 6.48e-7
-        E_r = 35000
-        arrhenius = pybamm.exp(E_r / self.param.R * (1 / 298.15 - 1 / T))
-        j0_int = k_int * pybamm.sqrt(ce) * pybamm.sqrt(c_s) * pybamm.sqrt(c_s_max - c_s) * arrhenius
-
-        eta_r = -2 / F_RT * pybamm.arcsinh(i_app / (self.phase_param.a_typ * j0_int * self.param.n.L))
-
-        ocp = variables[
-            f"{Domain} electrode open-circuit potential [V]"
-        ]
-        eta_plating = ocp - eta_r
-
-        j_stripping = -j0_plating * pybamm.exp(-F_RT * alpha_plating * eta_plating)
-
-        variables.update(self._get_standard_overpotential_variables(eta_plating))
-        variables.update(self._get_standard_reaction_variables(j_stripping))
-
-        # Add other standard coupled variables
-        # variables.update(super().get_coupled_variables(variables))
-
-        j_plating_av = variables[
-            f"X-averaged {domain} electrode {self.phase_name}lithium plating "
-            "interfacial current density [A.m-2]"
-        ]
-        j_plating = variables[
-            f"{Domain} electrode {self.phase_name}lithium plating "
-            "interfacial current density [A.m-2]"
-        ]
-        variables.update(
-            {
-                f"X-averaged {domain} electrode {self.phase_name}lithium plating "
-                "interfacial current density [A.m-2]": j_plating_av,
-                f"{Domain} electrode {self.phase_name}lithium plating "
-                "interfacial current density [A.m-2]": j_plating,
-            }
-        )
-
-        variables.update(
-            self._get_standard_volumetric_current_density_variables(variables)
-        )
-
-        return variables
-
-
-    def set_rhs(self, variables):
-        domain, Domain = self.domain_Domain
-        phase_name = self.phase_name
-
-        c_plated_Li = variables[
-            f"X-averaged {domain} {phase_name}lithium plating concentration "
-            "[mol.m-3]"
-        ]
-        c_dead_Li = variables[
-            f"X-averaged {domain} {phase_name}dead lithium concentration [mol.m-3]"
-        ]
-        j_stripping = variables[
-            f"X-averaged {domain} electrode {self.phase_name}lithium plating "
-            "interfacial current density [A.m-2]"
-        ]
-
-        a = pybamm.x_average(variables[
-            f"{Domain} electrode {phase_name}surface area to volume ratio [m-1]"
-        ])
-
-        dc_plated_Li = -a * j_stripping / self.param.F
-        dc_dead_Li = dc_plated_Li
-
-        self.rhs = {
-            c_plated_Li: dc_plated_Li,
-            c_dead_Li: dc_dead_Li,
-        }
-
-    def set_initial_conditions(self, variables):
-        domain, Domain = self.domain_Domain
-        phase_name = self.phase_name
-        if self.x_average is True:
-            c_plated_Li = variables[
-                f"X-averaged {domain} {phase_name}lithium plating concentration "
-                "[mol.m-3]"
-            ]
-            c_dead_Li = variables[
-                f"X-averaged {domain} {phase_name}dead lithium concentration [mol.m-3]"
-            ]
-        else:
-            c_plated_Li = variables[
-                f"{Domain} {phase_name}lithium plating concentration [mol.m-3]"
-            ]
-            c_dead_Li = variables[
-                f"{Domain} {phase_name}dead lithium concentration [mol.m-3]"
-            ]
-        c_dead_Li_0 = self.phase_param.c_plated_Li_0
-        c_plated_Li_0 = pybamm.Scalar(0.) # self.phase_param.c_plated_Li_0
-
-        self.initial_conditions = {c_plated_Li: c_plated_Li_0, c_dead_Li: c_dead_Li_0}
+# class Plating_FP_ForTesting(Plating):
+#
+#     def get_coupled_variables(self, variables):
+#         phase_param = self.phase_param
+#         domain, Domain = self.domain_Domain
+#         T = variables[f"{Domain} electrode temperature [K]"]
+#         alpha_plating = phase_param.alpha_plating
+#         c_plated_Li = variables[
+#             f"{Domain} {self.phase_name}lithium plating concentration [mol.m-3]"
+#         ]
+#         F_RT = self.param.F / (self.param.R * T)
+#
+#         ce = variables[
+#             f"{Domain} {self.phase_name}electrolyte concentration [mol.m-3]"
+#         ]
+#         j0_plating = phase_param.j0_plating(ce, c_plated_Li, T)
+#         i_app = variables["Total current density [A.m-2]"]
+#
+#         c_s = variables[f"X-averaged {domain} {self.phase_name}particle surface concentration [mol.m-3]"]
+#         c_s_max = self.phase_param.c_max
+#         k_int = 6.48e-7
+#         E_r = 35000
+#         arrhenius = pybamm.exp(E_r / self.param.R * (1 / 298.15 - 1 / T))
+#         j0_int = k_int * pybamm.sqrt(ce) * pybamm.sqrt(c_s) * pybamm.sqrt(c_s_max - c_s) * arrhenius
+#
+#         eta_r = -2 / F_RT * pybamm.arcsinh(i_app / (self.phase_param.a_typ * j0_int * self.param.n.L))
+#
+#         ocp = variables[
+#             f"{Domain} electrode open-circuit potential [V]"
+#         ]
+#         eta_plating = ocp - eta_r
+#
+#         j_stripping = -j0_plating * pybamm.exp(-F_RT * alpha_plating * eta_plating)
+#
+#         variables.update(self._get_standard_overpotential_variables(eta_plating))
+#         variables.update(self._get_standard_reaction_variables(j_stripping))
+#
+#         # Add other standard coupled variables
+#         # variables.update(super().get_coupled_variables(variables))
+#
+#         j_plating_av = variables[
+#             f"X-averaged {domain} electrode {self.phase_name}lithium plating "
+#             "interfacial current density [A.m-2]"
+#         ]
+#         j_plating = variables[
+#             f"{Domain} electrode {self.phase_name}lithium plating "
+#             "interfacial current density [A.m-2]"
+#         ]
+#         variables.update(
+#             {
+#                 f"X-averaged {domain} electrode {self.phase_name}lithium plating "
+#                 "interfacial current density [A.m-2]": j_plating_av,
+#                 f"{Domain} electrode {self.phase_name}lithium plating "
+#                 "interfacial current density [A.m-2]": j_plating,
+#             }
+#         )
+#
+#         variables.update(
+#             self._get_standard_volumetric_current_density_variables(variables)
+#         )
+#
+#         return variables
+#
+#
+#     def set_rhs(self, variables):
+#         domain, Domain = self.domain_Domain
+#         phase_name = self.phase_name
+#
+#         c_plated_Li = variables[
+#             f"X-averaged {domain} {phase_name}lithium plating concentration "
+#             "[mol.m-3]"
+#         ]
+#         c_dead_Li = variables[
+#             f"X-averaged {domain} {phase_name}dead lithium concentration [mol.m-3]"
+#         ]
+#         j_stripping = variables[
+#             f"X-averaged {domain} electrode {self.phase_name}lithium plating "
+#             "interfacial current density [A.m-2]"
+#         ]
+#
+#         a = pybamm.x_average(variables[
+#             f"{Domain} electrode {phase_name}surface area to volume ratio [m-1]"
+#         ])
+#
+#         dc_plated_Li = -a * j_stripping / self.param.F
+#         dc_dead_Li = dc_plated_Li
+#
+#         self.rhs = {
+#             c_plated_Li: dc_plated_Li,
+#             c_dead_Li: dc_dead_Li,
+#         }
+#
+#     def set_initial_conditions(self, variables):
+#         domain, Domain = self.domain_Domain
+#         phase_name = self.phase_name
+#         if self.x_average is True:
+#             c_plated_Li = variables[
+#                 f"X-averaged {domain} {phase_name}lithium plating concentration "
+#                 "[mol.m-3]"
+#             ]
+#             c_dead_Li = variables[
+#                 f"X-averaged {domain} {phase_name}dead lithium concentration [mol.m-3]"
+#             ]
+#         else:
+#             c_plated_Li = variables[
+#                 f"{Domain} {phase_name}lithium plating concentration [mol.m-3]"
+#             ]
+#             c_dead_Li = variables[
+#                 f"{Domain} {phase_name}dead lithium concentration [mol.m-3]"
+#             ]
+#         c_dead_Li_0 = self.phase_param.c_plated_Li_0
+#         c_plated_Li_0 = pybamm.Scalar(0.) # self.phase_param.c_plated_Li_0
+#
+#         self.initial_conditions = {c_plated_Li: c_plated_Li_0, c_dead_Li: c_dead_Li_0}
 
 
 class Plating_FP_old(Plating):

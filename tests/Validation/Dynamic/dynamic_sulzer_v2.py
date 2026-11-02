@@ -242,7 +242,7 @@ if __name__ == "__main__":
              c_p_ini / prev_params["Maximum concentration in positive electrode [mol.m-3]"] * Qp0) * 3600 / F
 
     # Load dynamic drive cycle
-    cycle = np.loadtxt("../../Dynamic_Profiles/WLTC.txt", skiprows=1)
+    cycle = np.loadtxt("../../../Dynamic_Profiles/WLTC.txt", skiprows=1)
     cycle[:, 0] -= 1
     cycle[:, 1] *= -1
     drive_step = pybamm.step.current(cycle, termination="<2.5V", duration=1800000)

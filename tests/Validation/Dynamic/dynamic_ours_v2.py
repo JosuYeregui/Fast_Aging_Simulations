@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     # -------------- Proposed solution ---------------------
 
-    input_vars = load_params("../../input/M50_okane_modified_plating.yaml")
+    input_vars = load_params("../../../input/M50_okane_modified_plating.yaml")
     #input_vars["D_ec"] /= 150
     # input_vars["k_sei"] /= 1000
     # input_vars["Beta_n"] *= 20
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     OCV_fn = get_OVC_func(input_vars)
 
     steps = [
-        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../../Dynamic_Profiles/WLTC.txt"),
+        DynamicProfile(V_lim=[2.5, 4.2], cycle=True, dir="../../../Dynamic_Profiles/WLTC.txt"),
         CCCVStep(I=1.5, V_end=4.2, Cutoff_I=0.25, Vlim=[2.5, 4.2])
     ]
 
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Q_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/Q_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/eps_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/eps_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lplating_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/Lplating_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/Lsei_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/Lsei_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMn_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/LAMn_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -267,5 +267,5 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('Results/LAMp_dynamic.pdf', dpi=300)
+        plt.savefig('../CC/Results/LAMp_dynamic.pdf', dpi=300)
     plt.show()

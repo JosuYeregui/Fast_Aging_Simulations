@@ -24,7 +24,7 @@ A Python-based battery degradation / SEI growth simulator using a custom RK23 in
 
 ## Configuration
 1. Edit simulation parameters in `evaluation.py` (for example `tot_cycles`, `initial_soc`).
-2. Edit input parameters in `input/M50_okane_modified.yaml`.
+2. Edit input parameters in `legacy/M50_okane_modified.yaml`.
 3. Core entry points:
    - `main.py` provides `scipy_rk23_integrate`.
    - `utils/` contains `param_to_inputvars.py`, `cycler.py`, and `characterize.py`.
@@ -36,7 +36,7 @@ A Python-based battery degradation / SEI growth simulator using a custom RK23 in
 ## Project structure (key files)
 1. `evaluation.py`
 2. `main.py`
-3. `input/M50_okane_modified.yaml`
+3. `legacy/M50_okane_modified.yaml`
 4. `utils/param_to_inputvars.py`
 5. `utils/cycler.py`
 6. `utils/characterize.py`
