@@ -2,6 +2,7 @@ import time
 from matplotlib import pyplot as plt
 import copy
 from copy import deepcopy
+import os
 import pickle
 
 from main import FastAging_Simulation
@@ -157,7 +158,9 @@ if __name__ == "__main__":
 
     esoh_solver = pybamm.lithium_ion.ElectrodeSOHSolver(param)
 
-    prev_param = sulzer["prev_params"]
+    # The pickled ParameterValues comes from an older PyBaMM and breaks pybamm.Simulation.copy()
+    # (missing `_hysteresis_states_from_direction`); rebuild a fresh object from its stored values.
+    prev_param = pybamm.ParameterValues(dict(sulzer["prev_params"]._store))
     sulzer = sulzer["history"]
     Q_sulzer = [get_capacity_from_sol(y, prev_param) for (_, y, _) in sulzer]
     eps_p_sulzer = np.asarray([y[4] for (_, y, _) in sulzer])
@@ -183,6 +186,8 @@ if __name__ == "__main__":
 
     xlim_cycles = cycles_ode[-1]
 
+    os.makedirs("Results", exist_ok=True)
+
 
     fig, ax = plt.subplots()
     ax.plot(cycles_sulzer, Q_sulzer, color="black", linestyle="--")
@@ -196,7 +201,7 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/Q_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/Q_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -215,7 +220,7 @@ if __name__ == "__main__":
     ax.autoscale(axis='y', tight=False)
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/eps_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/eps_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -228,7 +233,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/Lplating_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/Lplating_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -241,7 +246,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/Lsei_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/Lsei_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -254,7 +259,7 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/LAMn_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/LAMn_dynamic.pdf', dpi=300)
     plt.show()
 
     fig, ax = plt.subplots()
@@ -267,5 +272,5 @@ if __name__ == "__main__":
     plt.xlim([0, xlim_cycles])
     plt.tight_layout()
     if save_fig:
-        plt.savefig('../CC/Results/LAMp_dynamic.pdf', dpi=300)
+        plt.savefig('../Dynamic/Results/LAMp_dynamic.pdf', dpi=300)
     plt.show()

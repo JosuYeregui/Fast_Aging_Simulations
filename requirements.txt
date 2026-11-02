@@ -1,0 +1,7 @@
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.0.0
+matplotlib==3.8.4
+pyyaml==6.0.3
+pybamm==26.10.1.1
+scienceplots==2.2.1
